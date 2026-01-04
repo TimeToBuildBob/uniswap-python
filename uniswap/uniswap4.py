@@ -12,8 +12,6 @@ import configparser
 from uni4base import *
 import logging
 from decimal import Decimal
-##from colorama import Fore
-##from colorama import Style
 from typing import List, Any, Optional, Callable, Union, Tuple, Dict
 from web3.types import (
     TxParams,
@@ -34,15 +32,6 @@ _netid_to_name = {1000: "mainnet", 1001: "nile"}
 with open(os.path.abspath(f"assets\\erc20.abi")) as f:
         erc20_ABI : str = json.load(f)
 
-eth_by_dex = {
-    "UNISWAPV4" : ETH_ADDRESS,
-}
-transfer_by_dex = {
-    "UNISWAPV4" : WRAPPED_ETH_ADDRESS,
-}
-weth_by_dex = {
-            "UNISWAPV4" : WRAPPED_ETH_ADDRESS,
-}
 
 def _addr_to_str(a: AddressLike) -> str:
     if isinstance(a, bytes):
@@ -138,7 +127,6 @@ class Uniswap4():
         self.router = _load_contract(self.w3, abi_name="uniswap-v4/router", address=self.router_address)
         self.stateview = _load_contract(self.w3, abi_name="uniswap-v4/stateview", address=self.stateview_address)
         self.permit2 = _load_contract(self.w3, abi_name="uniswap-v4/permit2", address=self.permit2_address)
-        weth_by_dex[dex_name] = WRAPPED_ETH_ADDRESS
         return
 
     def load_contract_with_abi(self, abi_name: str, address: AddressLike) -> Contract:
@@ -401,10 +389,6 @@ class Uniswap4():
         
         return self._token_to_token_swap_output(swap_pool_key.currency0, qty, qtycap, swap_pool_key.currency1, recipient, swap_pool_key.fee, swap_pool_key.tick_spacing, swap_pool_key.hooks)
     
-    def get_weth_address(self) -> AddressLike:
-        address : str = weth_by_dex[self.dex_name]()
-        return address
-
     def get_token_balance(self, erc20: AddressLike) -> Decimal:
 
         contract = _load_contract(self.w3, abi_name = "erc20", address = erc20)
@@ -454,4 +438,5 @@ def _load_abi(name: str) -> str:
     with open(os.path.abspath(path + f"{name}.abi")) as f:
         abi = json.load(f)
     return abi
+
 
