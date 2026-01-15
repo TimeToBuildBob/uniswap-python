@@ -2,5 +2,6 @@ from . import exceptions
 from .cli import main
 from .uniswap import Uniswap, _str_to_addr
 from .uniswap4 import Uniswap4
+from .v4pools import V4pools
 
-__all__ = ["Uniswap", "Uniswap4", "exceptions", "_str_to_addr", "main"]
+__all__ = ["Uniswap", "Uniswap4", "V4pools", "exceptions", "_str_to_addr", "main"]
