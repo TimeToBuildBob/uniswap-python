@@ -8,7 +8,6 @@ from eth_abi import encode
 from eth_abi.packed import encode_packed
 import os
 import fnmatch
-import configparser
 import logging
 from decimal import Decimal
 from typing import List, Any, Optional, Callable, Union, Tuple, Dict
@@ -23,7 +22,15 @@ from web3.types import (
 )
 import json
 import ctypes
-from .uni4base import *
+from .v4types import *
+from .v4constants import (
+    _netid_to_name,
+    _router_contract_addresses_v4,
+    _quoter_contract_addresses_v4,
+    _stateview_contract_addresses_v4,
+    _permit2_contract_addresses_v4,
+    _poolmanager_contract_addresses_v4,
+)
 from .token import ERC20Token
 from .types import AddressLike
 from .util import (
@@ -41,7 +48,6 @@ from .util import (
 )
 
 
-_netid_to_name = {1000: "mainnet", 1001: "nile"}
 with open(os.path.abspath(f"assets\\erc20.abi")) as f:
         erc20_ABI : str = json.load(f)
 
@@ -89,16 +95,13 @@ class Uniswap4():
         self.london_style = london_fork
         self.london_priorityfee = max_priorityfee
 
-        chain_id = self.w3.net.version
-        config = configparser.ConfigParser()
-        config.read("configs\\quoter.ini")
-        quoter_address = config.get("settings",chain_id)
-        config.read("configs\\router.ini")
-        router_address = config.get("settings",chain_id)
-        config.read("configs\\stateview.ini")
-        stateview_address = config.get("settings",chain_id)
-        config.read("configs\\permit2.ini")
-        permit2_address = config.get("settings",chain_id)
+        chain_id = int(self.w3.net.version)
+        self.net_name = _netid_to_name[chain_id]
+
+        quoter_address = _quoter_contract_addresses_v4[self.net_name]
+        router_address = _router_contract_addresses_v4[self.net_name]
+        stateview_address = _stateview_contract_addresses_v4[self.net_name]
+        permit2_address = _permit2_contract_addresses_v4[self.net_name]
 
         self.quoter_address = _str_to_addr(quoter_address)
         self.router_address = _str_to_addr(router_address)
@@ -189,6 +192,29 @@ class Uniswap4():
 
     def set_gas_priorityfee(self, gas_priorityfee: float):
         self.london_priorityfee = gas_priorityfee
+    #StateView calls
+    def get_liquidity(self,
+                    token0: AddressLike, 
+                    token1: AddressLike,
+                    fee: int=500,
+                    tick_spacing: int=10,
+                    hooks: AddressLike=ZERO_HOOK,) -> int:
+        """Returns liquidity in the given pool."""
+        if token0 > token1:
+            (token1, token0) = (token0, token1)
+
+        pool = pool_key(token0,
+                        token1,
+                        fee,
+                        tick_spacing,
+                        hooks)
+        pool_id = self.get_pool_id(pool)
+
+        if self.version == 4:
+            liquidity : int = self.stateview.functions.getLiquidity(pool_id).call()
+        else:
+            raise ValueError("Function is not supported for this version")
+        return liquidity
 
     #Tokens price functions
     def get_token_token_spot_price(self, 
@@ -196,24 +222,37 @@ class Uniswap4():
                                    token1: AddressLike,
                                    fee: int=500,
                                    tick_spacing: int=10,
-                                   hooks: AddressLike=ZERO_HOOK,) -> int:
+                                   hooks: AddressLike=ZERO_HOOK,) -> float:
         """Current spot price for token to token trades."""
+
+        if token0.lower() < token1.lower():
+            den0 = self.get_token(token0).decimals
+            den1 = self.get_token(token1).decimals
+            zero_for_one = True
+        else:
+            den0 = self.get_token(token1).decimals
+            den1 = self.get_token(token0).decimals
+            zero_for_one = False
+
         if token0 > token1:
             (token1, token0) = (token0, token1)
 
-        pool = pool_key()
-        pool.currency0 = token0
-        pool.currency1 = token1
-        pool.fee = fee
-        pool.tick_spacing = tick_spacing
-        pool.hooks = hooks
+        pool = pool_key(token0,
+                        token1,
+                        fee,
+                        tick_spacing,
+                        hooks)
         pool_id = self.get_pool_id(pool)
 
         if self.version == 4:
-            price : int = self.stateview.functions.getSlot0(pool_id.hex()).call()[0]
+            spot_price_x96 : int = self.stateview.functions.getSlot0(pool_id).call()[0]
         else:
             raise ValueError("Function is not supported for this version")
-        return price
+
+        spot_price = (spot_price_x96 * spot_price_x96 * 10 ** den0 >> (96 * 2)) / (10 ** den1)
+        if not zero_for_one:
+            spot_price = 1 / spot_price
+        return spot_price
 
     def get_quote_exact_input_single(self, 
                                      token0: AddressLike, 
@@ -236,10 +275,10 @@ class Uniswap4():
                         tick_spacing,
                         hooks)
             #[0]=The output quote [1]=estimated gas units used for the swap
-            price : int = self.quoter.functions.quoteExactInputSingle((pool_key, zero_for_one,qty, hook_data)).call()[0]
+            quote_amount : int = self.quoter.functions.quoteExactInputSingle((pool_key, zero_for_one,qty, hook_data)).call()[0]
         else:
             raise ValueError("Function is not supported for this version")
-        return price
+        return quote_amount
 
     def get_pool_id(self, pool: pool_key):
         pool_data = eth_abi.abi.encode(types=["address", "address", "uint24", "int24", "address"],
@@ -306,10 +345,10 @@ class Uniswap4():
 
         try:
             spot_price = self.get_token_token_spot_price(token0,
-                token1,
-                fee,
-                tick_spacing,
-                hooks)
+                                                         token1,
+                                                         fee,
+                                                         tick_spacing,
+                                                         hooks)
         except (ArithmeticError, BadFunctionCallOutput):
             # ArithmeticError is raised when `token0` amount in the pool
             # equals 0.
@@ -322,11 +361,12 @@ class Uniswap4():
             return 1
         try:
             quote_amount = self.get_quote_exact_input_single(token0,
-                token1,
-                fee,
-                tick_spacing,
-                hooks,
-                hook_data)
+                                                             token1,
+                                                             qty,
+                                                             fee,
+                                                             tick_spacing,
+                                                             hooks,
+                                                             hook_data)
         except ContractLogicError:
             # ContractLogicError is raised when the pool's contract for given
             # `(token0, token1, fee)` hasn't been deployed.
@@ -335,9 +375,10 @@ class Uniswap4():
 
         # calculate and subtract the realised fees from the price impact.  See:
         # https://github.com/uniswap-python/uniswap-python/issues/310
-        price_impact_with_fees = float((spot_price - price) / spot_price)
+        price_impact_with_fees = (spot_price - price) / spot_price
         fee_realised_percentage = realised_fee_percentage(fee, qty)
         price_impact_real = price_impact_with_fees - fee_realised_percentage
+        return price_impact_real
 
 
     def get_quote_exact_output_single(self,
@@ -351,9 +392,9 @@ class Uniswap4():
         """Quote for token to token single hop trades with an exact output."""
         if self.version == 4:
             if(token0 < token1):
-                zero_for_one = True
-            else:
                 zero_for_one = False
+            else:
+                zero_for_one = True
                 (token1, token0) = (token0, token1)
 
             pool_key = (token0,
@@ -362,18 +403,10 @@ class Uniswap4():
                         tick_spacing,
                         hooks,)
             #[0]=The input quote [1]=estimated gas units used for the swap
-            price : int = self.quoter.functions.quoteExactOutputSingle((pool_key, zero_for_one,qty, hook_data)).call()[0]
+            quote_amount : int = self.quoter.functions.quoteExactOutputSingle((pool_key, zero_for_one,qty, hook_data)).call()[0]
         else:
             raise ValueError("Function is not supported for this version")
-        return price
-
-
-    def build_execute_params(self,):
-        """
-        Generic parameters builder for universal router execute() call.
-        WIP
-        """
-        pass
+        return quote_amount
 
     #Swap functions
     def _token_to_token_swap_input(self,
@@ -461,10 +494,10 @@ class Uniswap4():
                         tick_spacing,
                         hooks,)
             if input_token < output_token:
-                zero_for_one = True
+                zero_for_one = False
                 (token0, token1) = (input_token, output_token)
             else:
-                zero_for_one = False
+                zero_for_one = True
                 (token0, token1) = (output_token,input_token)
             exact_output_single_params = encode(['((address,address,uint24,int24,address),bool,int128,uint128,bytes)'],
                                                 [((token0, token1,fee,tick_spacing,hooks,), zero_for_one, qty, amount_in_max, bytes(0))],)
