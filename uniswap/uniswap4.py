@@ -2,11 +2,13 @@ from web3 import Web3
 import eth_abi.abi
 from web3.contract import Contract
 from web3.contract.contract import ContractFunction
+from web3.exceptions import BadFunctionCallOutput, ContractLogicError
 from eth_typing import AnyAddress
 from eth_abi.codec import ABICodec
 from eth_abi import encode
 from eth_abi.packed import encode_packed
 import os
+import time
 import fnmatch
 import logging
 from decimal import Decimal
@@ -32,6 +34,7 @@ from .v4constants import (
     _poolmanager_contract_addresses_v4,
 )
 from .token import ERC20Token
+from .exceptions import InsufficientBalance, InvalidToken
 from .types import AddressLike
 from .util import (
     _addr_to_str,
@@ -47,10 +50,7 @@ from .util import (
     realised_fee_percentage,
 )
 
-
-with open(os.path.abspath(f"assets\\erc20.abi")) as f:
-        erc20_ABI : str = json.load(f)
-
+logger = logging.getLogger(__name__)
 
 class Uniswap4():
     def __init__(self,
@@ -392,9 +392,9 @@ class Uniswap4():
         """Quote for token to token single hop trades with an exact output."""
         if self.version == 4:
             if(token0 < token1):
-                zero_for_one = False
-            else:
                 zero_for_one = True
+            else:
+                zero_for_one = False
                 (token1, token0) = (token0, token1)
 
             pool_key = (token0,
@@ -494,10 +494,10 @@ class Uniswap4():
                         tick_spacing,
                         hooks,)
             if input_token < output_token:
-                zero_for_one = False
+                zero_for_one = True
                 (token0, token1) = (input_token, output_token)
             else:
-                zero_for_one = True
+                zero_for_one = False
                 (token0, token1) = (output_token,input_token)
             exact_output_single_params = encode(['((address,address,uint24,int24,address),bool,int128,uint128,bytes)'],
                                                 [((token0, token1,fee,tick_spacing,hooks,), zero_for_one, qty, amount_in_max, bytes(0))],)
