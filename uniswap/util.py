@@ -1,6 +1,5 @@
 import functools
 import json
-from xml.etree import ElementTree as ET
 import math
 import os
 from typing import (
@@ -11,23 +10,24 @@ from typing import (
     Tuple,
     Union,
 )
+from xml.etree import ElementTree as ET
 
 import lru
 from web3 import Web3
 from web3.contract import Contract
 from web3.exceptions import NameNotFound
-from web3.middleware import construct_simple_cache_middleware
+from web3.middleware.cache import construct_simple_cache_middleware
 from web3.types import Middleware
 
 from .constants import (
     MAX_TICK,
     MIN_TICK,
     SIMPLE_CACHE_RPC_WHITELIST,
-    _tick_spacing,
     _netid_to_name,
     _poolmanager_contract_addresses_v4,
+    _tick_spacing,
 )
-from .types import Address, AddressLike, pool_key
+from .types import Address, AddressLike, PoolKey
 
 
 def _get_eth_simple_cache_middleware() -> Middleware:
@@ -94,8 +94,7 @@ def _encode_path(token_in: AddressLike, route: List[Tuple[int, AddressLike]]) ->
     raise NotImplementedError
 
 
-# Adapted from:
-# https://github.com/Uniswap/v3-sdk/blob/main/src/utils/encodeSqrtRatioX96.ts
+# Adapted from: https://github.com/Uniswap/v3-sdk/blob/main/src/utils/encodeSqrtRatioX96.ts
 def encode_sqrt_ratioX96(amount_0: int, amount_1: int) -> int:
     numerator = amount_1 << 192
     denominator = amount_0
@@ -136,8 +135,7 @@ def get_tick_at_sqrt(sqrtPriceX96: int) -> int:
     return tick
 
 
-# Adapted from:
-# https://github.com/tradingstrategy-ai/web3-ethereum-defi/blob/c3c68bc723d55dda0cc8252a0dadb534c4fdb2c5/eth_defi/uniswap_v3/utils.py#L77
+# Adapted from: https://github.com/tradingstrategy-ai/web3-ethereum-defi/blob/c3c68bc723d55dda0cc8252a0dadb534c4fdb2c5/eth_defi/uniswap_v3/utils.py#L77
 def get_min_tick(fee: int) -> int:
     min_tick_spacing: int = _tick_spacing[fee]
     return -(MIN_TICK // -min_tick_spacing) * min_tick_spacing
@@ -157,9 +155,9 @@ def default_tick_range(fee: int) -> Tuple[int, int]:
 
 def nearest_tick(tick: int, fee: int) -> int:
     min_tick, max_tick = default_tick_range(fee)
-    assert (
-        min_tick <= tick <= max_tick
-    ), f"Provided tick is out of bounds: {(min_tick, max_tick)}"
+    assert min_tick <= tick <= max_tick, (
+        f"Provided tick is out of bounds: {(min_tick, max_tick)}"
+    )
 
     tick_spacing = _tick_spacing[fee]
     rounded_tick_spacing = round(tick / tick_spacing) * tick_spacing
@@ -293,7 +291,7 @@ class V4pools:
                     pool_fee = int(log_item.args.fee)
                     pool_tick_spacing = int(log_item.args.tickSpacing)
                     pool_hooks = log_item.args.hooks
-                    pool: pool_key = pool_key(
+                    pool: PoolKey = PoolKey(
                         pool_currency0,
                         pool_currency1,
                         pool_fee,
@@ -359,7 +357,7 @@ class V4pools:
                 pool_fee = int(item[2].text)
                 pool_tick_spacing = int(item[3].text)
                 pool_hooks = item[4].text
-                pool: pool_key = pool_key(
+                pool: PoolKey = PoolKey(
                     pool_currency0,
                     pool_currency1,
                     pool_fee,
