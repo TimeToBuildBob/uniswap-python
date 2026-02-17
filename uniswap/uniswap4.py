@@ -1,35 +1,37 @@
-from web3 import Web3
+import logging
+import os
+import time
+from decimal import Decimal
+from typing import Dict, List, Optional, Union
+
 import eth_abi.abi
+from eth_abi import encode
+from eth_abi.packed import encode_packed
+from web3 import Web3
 from web3.contract import Contract
 from web3.contract.contract import ContractFunction
 from web3.exceptions import BadFunctionCallOutput, ContractLogicError
-from eth_abi import encode
-from eth_abi.packed import encode_packed
-import os
-import time
-import logging
-from decimal import Decimal
-from typing import List, Optional, Union, Dict
 from web3.types import (
-    Nonce,
     HexBytes,
+    Nonce,
 )
-from .types import AddressLike, pool_key
+
 from .constants import (
     ETH_ADDRESS,
     ZERO_HOOK,
     _netid_to_name,
-    _router_contract_addresses_v4,
-    _quoter_contract_addresses_v4,
-    _stateview_contract_addresses_v4,
     _permit2_contract_addresses_v4,
+    _quoter_contract_addresses_v4,
+    _router_contract_addresses_v4,
+    _stateview_contract_addresses_v4,
 )
-from .token import ERC20Token
 from .exceptions import InvalidToken
+from .token import ERC20Token
+from .types import AddressLike, PoolKey
 from .util import (
     _addr_to_str,
-    _load_contract,
     _load_abi,
+    _load_contract,
     _str_to_addr,
     realised_fee_percentage,
 )
@@ -46,10 +48,10 @@ class Uniswap4:
         web3: Web3 = None,
         version: int = 4,
         max_slippage: float = 0.1,
-        max_gas: float = 250000.0,
-        max_gprice: float = 1.80,
-        london_fork: int = 1,
-        max_priorityfee: float = 1.0,
+        gas_limit: float = 250000.0,
+        gas_price: float = 1.80,
+        priority_fee: float = 1.0,
+        post_merge: bool = True,
     ) -> None:
         """
         :param address: The public address of the ETH wallet to use.
@@ -58,10 +60,10 @@ class Uniswap4:
         :param web3: Can be optionally set to a custom Web3 instance.
         :param version: Which version of the Uniswap contracts to use.
         :param default_slippage: Default slippage for a trade, as a float (0.01 is 1%). WARNING: slippage is untested.
-        :param max_gas: Maxumum gas amount allocated for transactions.
-        :param max_gprice: Cost per unit of gas, in GWei.
-        :param london_fork: 1 is for post-Merge transations, 0 = for legacy ones.
-        :param max_priorityfee: Amount of ETH to pay to the block producers, in GWei. Affects tx position in the block, the bigger value, the higher position is.
+        :param gas_limit: Maxumum gas amount allocated for transactions.
+        :param gas_price: Cost per unit of gas, in GWei.
+        :param priority_fee: Amount of ETH to pay to the block producers, in GWei. Affects tx position in the block, the bigger value, the higher position is.
+        :param post_merge: True is for post-Merge transations, False for legacy ones.
         """
 
         self.address: AddressLike = (
@@ -93,10 +95,10 @@ class Uniswap4:
         self.max_approval_int = int(self.max_approval_hex, 16)
         self.max_approval_check_hex = f"0x{15 * '0'}{49 * 'f'}"
         self.max_approval_check_int = int(self.max_approval_check_hex, 16)
-        self.gas_limit = max_gas
-        self.gas_price = max_gprice
-        self.london_style = london_fork
-        self.london_priorityfee = max_priorityfee
+        self.gas_limit = gas_limit
+        self.gas_price = gas_price
+        self.post_merge = post_merge
+        self.priority_fee = priority_fee
 
         chain_id = int(self.w3.net.version)
         self.net_name = _netid_to_name[chain_id]
@@ -165,7 +167,7 @@ class Uniswap4:
 
     def _get_tx_params(self, value: int = 0, gas: int = 250000) -> dict:
         """Get generic transaction parameters."""
-        if self.london_style == 0:
+        if not self.post_merge:
             return {
                 "from": _addr_to_str(self.address),
                 "value": value,
@@ -177,7 +179,7 @@ class Uniswap4:
             return {
                 "from": _addr_to_str(self.address),
                 "gas": int(self.gas_limit),
-                "maxPriorityFeePerGas": Web3.to_wei(self.london_priorityfee, "gwei"),
+                "maxPriorityFeePerGas": Web3.to_wei(self.priority_fee, "gwei"),
                 "maxFeePerGas": Web3.to_wei(self.gas_price, "gwei"),
                 "type": 2,
                 "chainId": self.w3.eth.chain_id,
@@ -202,10 +204,10 @@ class Uniswap4:
 
     # Priority fee in GWei
     def get_gas_priorityfee(self) -> float:
-        return self.london_priorityfee
+        return self.priority_fee
 
-    def set_gas_priorityfee(self, gas_priorityfee: float):
-        self.london_priorityfee = gas_priorityfee
+    def set_gas_priorityfee(self, priority_fee: float):
+        self.priority_fee = priority_fee
 
     # StateView calls
     def get_fee_growth_globals(
@@ -222,7 +224,7 @@ class Uniswap4:
         if token0 > token1:
             (token1, token0) = (token0, token1)
 
-        pool = pool_key(token0, token1, fee, tick_spacing, hooks)
+        pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
         if self.version == 4:
             fee_growth_globals: int = self.stateview.functions.getFeeGrowthGlobals(
@@ -252,7 +254,7 @@ class Uniswap4:
         if token0 > token1:
             (token1, token0) = (token0, token1)
 
-        pool = pool_key(token0, token1, fee, tick_spacing, hooks)
+        pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
         if self.version == 4:
             fee_growth_inside: int = self.stateview.functions.getFeeGrowthInside(
@@ -278,7 +280,7 @@ class Uniswap4:
         if token0 > token1:
             (token1, token0) = (token0, token1)
 
-        pool = pool_key(token0, token1, fee, tick_spacing, hooks)
+        pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
 
         if self.version == 4:
@@ -306,7 +308,7 @@ class Uniswap4:
         if token0 > token1:
             (token1, token0) = (token0, token1)
 
-        pool = pool_key(token0, token1, fee, tick_spacing, hooks)
+        pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
 
         salt = HexBytes(token_id.to_bytes(32, byteorder="big"))
@@ -337,7 +339,7 @@ class Uniswap4:
         if token0 > token1:
             (token1, token0) = (token0, token1)
 
-        pool = pool_key(token0, token1, fee, tick_spacing, hooks)
+        pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
 
         if self.version == 4:
@@ -368,7 +370,7 @@ class Uniswap4:
         if token0 > token1:
             (token1, token0) = (token0, token1)
 
-        pool = pool_key(token0, token1, fee, tick_spacing, hooks)
+        pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
 
         if self.version == 4:
@@ -394,7 +396,7 @@ class Uniswap4:
         if token0 > token1:
             (token1, token0) = (token0, token1)
 
-        pool = pool_key(token0, token1, fee, tick_spacing, hooks)
+        pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
         if self.version == 4:
             fee_growth_outside: int = self.stateview.functions.getTickFeeGrowthOutside(
@@ -423,7 +425,7 @@ class Uniswap4:
         if token0 > token1:
             (token1, token0) = (token0, token1)
 
-        pool = pool_key(token0, token1, fee, tick_spacing, hooks)
+        pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
         if self.version == 4:
             tick_info: int = self.stateview.functions.getTickInfo(pool_id, tick).call()
@@ -505,7 +507,7 @@ class Uniswap4:
             raise ValueError("Function is not supported for this version")
         return quote_amount
 
-    def get_pool_id(self, pool: pool_key) -> HexBytes:
+    def get_pool_id(self, pool: PoolKey) -> HexBytes:
         pool_data = eth_abi.abi.encode(
             types=["address", "address", "uint24", "int24", "address"],
             args=[
@@ -806,21 +808,23 @@ class Uniswap4:
             raise ValueError("Function is not supported for this version")
 
     def drop_txn(
-        self, address_to: AddressLike, gwei: float, gasv: float, priorityfee: int = 10
+        self,
+        address_to: AddressLike,
+        gas_price: float,
+        priority_fee: int = 10,
     ) -> HexBytes:
         """
         Replaces pending transaction with zero-value ETH transfer
         :param address_to Own address
-        Params gwei and priorityfee are Gas Price and Max Priority Fee respectively; must be at least 20% more than values original tx has.
-        :param gasv Gas allocated; can't be less than value original tx has
+        Params gas_price and priority_fee are Gas Price and Max Priority Fee respectively; MUST be at least 20% more than values original tx has.
         """
         # This one is for legacy transactions
         signed_txn = self.w3.eth.account.sign_transaction(
             dict(
                 chainId=int(self.w3.net.version),
                 nonce=self.last_nonce,
-                gasPrice=Web3.to_wei(self.gas_price, "gwei"),
-                gas=int(self.gas_limit),
+                gasPrice=Web3.to_wei(gas_price, "gwei"),
+                gas=int(21000),
                 to=Web3.to_checksum_address(address_to),
                 value=Web3.to_wei(0, "wei"),
             ),
@@ -832,15 +836,15 @@ class Uniswap4:
                 chainId=int(self.w3.net.version),
                 type=2,
                 nonce=self.last_nonce,
-                maxFeePerGas=Web3.to_wei(int(gwei), "gwei"),
-                maxPriorityFeePerGas=Web3.to_wei(priorityfee, "gwei"),
+                maxFeePerGas=Web3.to_wei(int(gas_price), "gwei"),
+                maxPriorityFeePerGas=Web3.to_wei(priority_fee, "gwei"),
                 gas=int(21000),
                 to=Web3.to_checksum_address(address_to),
                 value=Web3.to_wei(0, "wei"),
             ),
             self.private_key,
         )
-        if self.london_style == 1:
+        if self.post_merge:
             return self.w3.eth.send_raw_transaction(signed_txn_london.rawTransaction)
         else:
             return self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
@@ -851,7 +855,7 @@ class Uniswap4:
         output_token: AddressLike,
         qty: int,
         qtycap: int,
-        swap_pool_key: pool_key,
+        swap_pool_key: PoolKey,
         recipient: AddressLike = None,
         fee: int = 3000,
     ) -> HexBytes:
@@ -873,7 +877,7 @@ class Uniswap4:
         output_token: AddressLike,
         qty: int,
         qtycap: int,
-        swap_pool_key: pool_key,
+        swap_pool_key: PoolKey,
         recipient: AddressLike = None,
         fee: int = 3000,
     ) -> HexBytes:
