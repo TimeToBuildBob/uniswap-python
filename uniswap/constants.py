@@ -16,6 +16,7 @@ WETH9_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 ZERO_HOOK = "0x0000000000000000000000000000000000000000"
 WRAPPED_ETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 
+
 # see: https://chainid.network/chains/
 _netid_to_name = {
     1: "mainnet",
@@ -88,13 +89,11 @@ _router_contract_addresses_v2 = {
 
 MAX_UINT_128 = (2**128) - 1
 
-# Source:
-# https://github.com/Uniswap/v3-core/blob/v1.0.0/contracts/libraries/TickMath.sol#L8-L11
+# Source: https://github.com/Uniswap/v3-core/blob/v1.0.0/contracts/libraries/TickMath.sol#L8-L11
 MIN_TICK = -887272
 MAX_TICK = -MIN_TICK
 
-# Source:
-# https://github.com/Uniswap/v3-core/blob/v1.0.0/contracts/UniswapV3Factory.sol#L26-L31
+# Source: https://github.com/Uniswap/v3-core/blob/v1.0.0/contracts/UniswapV3Factory.sol#L26-L31
 _tick_spacing = {100: 1, 500: 10, 3_000: 60, 10_000: 200}
 
 # Derived from (MIN_TICK//tick_spacing) >> 8 and (MAX_TICK//tick_spacing) >> 8
@@ -104,7 +103,6 @@ _tick_bitmap_range = {
     3_000: (-58, 57),
     10_000: (-18, 17),
 }
-
 # Source:
 # https://docs.uniswap.org/contracts/v4/deployments
 _router_contract_addresses_v4 = {
