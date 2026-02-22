@@ -217,7 +217,7 @@ class V4pools:
         clear_list: bool = True,
     ):
         """
-        :param first_block_number Starting block for the scanning proccess
+        :param first_block_number Starting block for the scanning process
         :param chunk_size Defines amount of blocks per single log request
         :param clear_list When True, clears pool list before log scanning, when False - new entries will be added to the end of the list.
         """
@@ -241,12 +241,12 @@ class V4pools:
         end_block = 0
 
         print(
-            f"Logs proccessing started, start block = {start_block}; end block = {last_block_number}."
+            f"Logs processing started, start block = {start_block}; end block = {last_block_number}."
         )
         if clear_list:
             self.poolkeys_list.clear()
 
-        for i in range(0, chunks_amount):
+        for i in range(0, chunks_amount + 1):
             if start_block + chunk_size <= last_block_number:
                 end_block = start_block + chunk_size
             else:
@@ -262,7 +262,7 @@ class V4pools:
                     to_block=end_block,
                 )
             except Exception:
-                # Exception occures when chunk size value is too big so RPC rejects
+                # Exception occurs when chunk size value is too big so RPC rejects
                 # requests OR endpoint is down.
                 print(
                     "Couldn't retrieve logs; check chunk size and RPC availability. Aborted.              "
@@ -274,7 +274,7 @@ class V4pools:
                         log_item.transactionHash
                     )
                 except Exception:
-                    # Exception occures when endpoint is down.
+                    # Exception occurs when endpoint is down.
                     print(
                         "Couldn't retrieve transaction receipt; check RPC availability."
                     )
@@ -309,7 +309,7 @@ class V4pools:
         print(
             "---------------------------------------------------------------------------------------------"
         )
-        print(f"Logs proccessing completed. Last block processed {last_block_number}")
+        print(f"Logs processing completed. Last block processed {last_block_number}")
         self.set_last_block(last_block_number)
         return
 
