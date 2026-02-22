@@ -883,10 +883,10 @@ class Uniswap4:
     ) -> HexBytes:
 
         return self._token_to_token_swap_output(
-            swap_pool_key.currency0,
+            input_token,
             qty,
             qtycap,
-            swap_pool_key.currency1,
+            output_token,
             recipient,
             swap_pool_key.fee,
             swap_pool_key.tick_spacing,
