@@ -530,7 +530,7 @@ class Uniswap4:
         # FIXME: This function should always return the same output for the
         # same input
         #        and would therefore benefit from caching
-        if address == "0x0000000000000000000000000000000000000000":
+        if address == ETH_ADDRESS or address == _str_to_addr(ETH_ADDRESS):
             # This isn't exactly right, but for all intents and purposes,
             # ETH is treated as a ERC20 by Uniswap.
             return ERC20Token(
@@ -602,8 +602,8 @@ class Uniswap4:
             # `(token0, token1, fee)` hasn't been deployed.
             return 1
         price = (
-            quote_amount / (qty / (10 ** self.get_token(token0).decimals))
-        ) / 10 ** self.get_token(token1).decimals
+            quote_amount / (qty / (10 ** self.get_token(_str_to_addr(token0)).decimals))
+        ) / 10 ** self.get_token(_str_to_addr(token1)).decimals
 
         # calculate and subtract the realised fees from the price impact.  See:
         # https://github.com/uniswap-python/uniswap-python/issues/310
@@ -732,7 +732,7 @@ class Uniswap4:
         qtycap: int,
         output_token: str,
         fee: int,
-        tick_spacing,
+        tick_spacing: int,
         hooks: str,
         recipient: Optional[str] = None,
     ) -> HexBytes:
