@@ -530,7 +530,7 @@ class Uniswap4:
         # FIXME: This function should always return the same output for the
         # same input
         #        and would therefore benefit from caching
-        if address == "0x0000000000000000000000000000000000000000":
+        if address == ETH_ADDRESS or address == _str_to_addr(ETH_ADDRESS):
             # This isn't exactly right, but for all intents and purposes,
             # ETH is treated as a ERC20 by Uniswap.
             return ERC20Token(
