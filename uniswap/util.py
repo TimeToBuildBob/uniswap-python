@@ -198,7 +198,7 @@ class V4pools:
         self,
         web3: Web3,
     ):
-        self.poolkeys_list = list()
+        self.poolkeys_list: List[PoolKey] = list()
         self.web3 = web3
         self.last_block = 0
 
@@ -207,7 +207,7 @@ class V4pools:
     ) -> int:
         return self.last_block
 
-    def set_last_block(self, value: int):
+    def set_last_block(self, value: int) -> None:
         self.last_block = value
 
     def fetch_poolkey_data(
@@ -215,7 +215,7 @@ class V4pools:
         first_block_number: int,
         chunk_size: int = 500,
         clear_list: bool = True,
-    ):
+    ) -> None:
         """
         :param first_block_number Starting block for the scanning process
         :param chunk_size Defines amount of blocks per single log request
@@ -281,16 +281,16 @@ class V4pools:
                     continue
 
                 if (
-                    txn.to.lower() != pool_manager_contract_address.lower()
-                    or int(txn.status) == 0
+                    txn["to"].lower() != pool_manager_contract_address.lower()
+                    or int(txn["status"]) == 0
                 ):
                     continue
                 try:
-                    pool_currency0 = log_item.args.currency0
-                    pool_currency1 = log_item.args.currency1
-                    pool_fee = int(log_item.args.fee)
-                    pool_tick_spacing = int(log_item.args.tickSpacing)
-                    pool_hooks = log_item.args.hooks
+                    pool_currency0 = str(log_item.args.currency0)
+                    pool_currency1 = str(log_item.args.currency1)
+                    pool_fee = int(str(log_item.args.fee))
+                    pool_tick_spacing = int(str(log_item.args.tickSpacing))
+                    pool_hooks = str(log_item.args.hooks)
                     pool: PoolKey = PoolKey(
                         pool_currency0,
                         pool_currency1,
@@ -313,7 +313,7 @@ class V4pools:
         self.set_last_block(last_block_number)
         return
 
-    def save_poolkeys_list(self, poolkey_data_filename: str):
+    def save_poolkeys_list(self, poolkey_data_filename: str) -> None:
         """Saves poolKey list to specified file (XML format)"""
         pool_data = ET.Element("PoolData")
 
@@ -338,7 +338,7 @@ class V4pools:
         ET.ElementTree(pool_data).write(poolkey_data_filename)
         return
 
-    def load_poolkeys_list(self, poolkey_data_filename: str):
+    def load_poolkeys_list(self, poolkey_data_filename: str) -> None:
         """Loads poolKey list from specified file (XML format)"""
         if os.path.isfile(poolkey_data_filename):
             try:
@@ -368,7 +368,7 @@ class V4pools:
         else:
             raise ValueError("Couldn't locate file " + poolkey_data_filename)
 
-    def get_poolkeys_sublist(self, currency0: str, currency1: str) -> List:
+    def get_poolkeys_sublist(self, currency0: str, currency1: str) -> List[PoolKey]:
         """Returns all pools for the (currency0, currency1) pair"""
         if currency0 < currency1:
             (c0, c1) = (currency0, currency1)
