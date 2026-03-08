@@ -732,7 +732,7 @@ class Uniswap4:
         output_token: str,
         fee: int,
         tick_spacing,
-        hooks: AddressLike,
+        hooks: str,
         recipient: Optional[str] = None,
     ) -> HexBytes:
         if self.version == 4:
@@ -902,7 +902,7 @@ class Uniswap4:
             balance: int = contract.functions.balanceOf(self.address).call()
         except Exception:
             balance: int = 0
-        return_balance: Decimal = Decimal(balance / (10**decimals))
+        return_balance: Decimal = Decimal(balance) / Decimal(10**decimals)
         return return_balance
 
     def get_balance(self) -> Decimal:
@@ -911,7 +911,8 @@ class Uniswap4:
             balance: int = self.w3.eth.get_balance(self.address)
         except Exception:
             balance: int = 0
-        return Decimal(balance / (10**18))
+        return_balance: Decimal = Decimal(balance) / Decimal(10**18)
+        return return_balance
 
     def _deadline(self) -> int:
         """Get a predefined deadline. 10min by default."""
