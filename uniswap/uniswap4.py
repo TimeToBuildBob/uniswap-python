@@ -14,6 +14,7 @@ from web3.exceptions import BadFunctionCallOutput, ContractLogicError
 from web3.types import (
     HexBytes,
     Nonce,
+    TxParams,
 )
 
 from .constants import (
@@ -43,9 +44,9 @@ class Uniswap4:
     def __init__(
         self,
         address: Union[str, AddressLike],
-        private_key: str,
-        provider: str = None,
-        web3: Web3 = None,
+        private_key: Optional[str],
+        provider: Optional[str] = None,
+        web3: Optional[Web3] = None,
         version: int = 4,
         max_slippage: float = 0.1,
         gas_limit: float = 250000.0,
@@ -146,7 +147,7 @@ class Uniswap4:
             tx = self._build_and_send_tx(function)
             time.sleep(7)
         # Give an exchange/router max approval of a token.
-        max_approval: int = 2**100 - 1
+        max_approval = 2**100 - 1
         expiration: int = int(10**12)
         print(f"Setting permit for {_addr_to_str(token)} at router contract...")
         function = self.permit2.functions.approve(
@@ -156,7 +157,7 @@ class Uniswap4:
 
         return tx
 
-    def approval(self, token: AddressLike):
+    def approval(self, token: AddressLike) -> int:
         # [0]=current allowance, [1]=allowance expiration [2]=current nonce
         result = int(
             self.permit2.functions.allowance(
@@ -165,7 +166,7 @@ class Uniswap4:
         )
         return result
 
-    def _get_tx_params(self, value: int = 0, gas: int = 250000) -> dict:
+    def _get_tx_params(self, value: int = 0, gas: int = 250000) -> TxParams:
         """Get generic transaction parameters."""
         if not self.post_merge:
             return {
@@ -192,31 +193,31 @@ class Uniswap4:
     def get_gas_limit(self) -> float:
         return self.gas_limit
 
-    def set_gas_limit(self, gas_limit: float):
+    def set_gas_limit(self, gas_limit: float) -> None:
         self.gas_limit = gas_limit
 
     # Gas price in GWei
     def get_gas_price(self) -> float:
         return self.gas_price
 
-    def set_gas_price(self, gas_price: float):
+    def set_gas_price(self, gas_price: float) -> None:
         self.gas_price = gas_price
 
     # Priority fee in GWei
     def get_gas_priorityfee(self) -> float:
         return self.priority_fee
 
-    def set_gas_priorityfee(self, priority_fee: float):
+    def set_gas_priorityfee(self, priority_fee: float) -> None:
         self.priority_fee = priority_fee
 
     # StateView calls
     def get_fee_growth_globals(
         self,
-        token0: AddressLike,
-        token1: AddressLike,
+        token0: str,
+        token1: str,
         fee: int,
         tick_spacing: int,
-        hooks: AddressLike,
+        hooks: str,
     ) -> Dict:
         """
         Retrieves the global fee growth of a pool.
@@ -227,7 +228,7 @@ class Uniswap4:
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
         if self.version == 4:
-            fee_growth_globals: int = self.stateview.functions.getFeeGrowthGlobals(
+            fee_growth_globals: Dict = self.stateview.functions.getFeeGrowthGlobals(
                 pool_id
             ).call()
         else:
@@ -240,11 +241,11 @@ class Uniswap4:
 
     def get_fee_growth_inside(
         self,
-        token0: AddressLike,
-        token1: AddressLike,
+        token0: str,
+        token1: str,
         fee: int,
         tick_spacing: int,
-        hooks: AddressLike,
+        hooks: str,
         tick_lower: int,
         tick_upper: int,
     ) -> Dict:
@@ -257,7 +258,7 @@ class Uniswap4:
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
         if self.version == 4:
-            fee_growth_inside: int = self.stateview.functions.getFeeGrowthInside(
+            fee_growth_inside: Dict = self.stateview.functions.getFeeGrowthInside(
                 pool_id, tick_lower, tick_upper
             ).call()
         else:
@@ -270,11 +271,11 @@ class Uniswap4:
 
     def get_liquidity(
         self,
-        token0: AddressLike,
-        token1: AddressLike,
+        token0: str,
+        token1: str,
         fee: int,
         tick_spacing: int,
-        hooks: AddressLike,
+        hooks: str,
     ) -> int:
         """Retrieves the total liquidity of a pool."""
         if token0 > token1:
@@ -291,12 +292,12 @@ class Uniswap4:
 
     def get_position_info(
         self,
-        token0: AddressLike,
-        token1: AddressLike,
+        token0: str,
+        token1: str,
         fee: int,
         tick_spacing: int,
-        hooks: AddressLike,
-        owner: AddressLike,
+        hooks: str,
+        owner: str,
         tick_lower: int,
         tick_upper: int,
         token_id: int,
@@ -313,7 +314,7 @@ class Uniswap4:
 
         salt = HexBytes(token_id.to_bytes(32, byteorder="big"))
         if self.version == 4:
-            position_info: int = self.stateview.functions.getPositionInfo(
+            position_info: Dict = self.stateview.functions.getPositionInfo(
                 pool_id, owner, tick_lower, tick_upper, salt
             ).call()
         else:
@@ -327,11 +328,11 @@ class Uniswap4:
 
     def get_slot0(
         self,
-        token0: AddressLike,
-        token1: AddressLike,
+        token0: str,
+        token1: str,
         fee: int,
         tick_spacing: int,
-        hooks: AddressLike,
+        hooks: str,
     ) -> Dict:
         """
         Returns current state of the pool.
@@ -343,7 +344,7 @@ class Uniswap4:
         pool_id = self.get_pool_id(pool)
 
         if self.version == 4:
-            slot: int = self.stateview.functions.getSlot0(pool_id).call()
+            slot: Dict = self.stateview.functions.getSlot0(pool_id).call()
         else:
             raise ValueError("Function is not supported for this version")
         return_value = {
@@ -356,11 +357,11 @@ class Uniswap4:
 
     def get_tick_bitmap(
         self,
-        token0: AddressLike,
-        token1: AddressLike,
+        token0: str,
+        token1: str,
         fee: int,
         tick_spacing: int,
-        hooks: AddressLike,
+        hooks: str,
         tick: int,
     ) -> int:
         """
@@ -383,11 +384,11 @@ class Uniswap4:
 
     def get_tick_fee_growth_outside(
         self,
-        token0: AddressLike,
-        token1: AddressLike,
+        token0: str,
+        token1: str,
         fee: int,
         tick_spacing: int,
-        hooks: AddressLike,
+        hooks: str,
         tick: int,
     ) -> Dict:
         """
@@ -399,7 +400,7 @@ class Uniswap4:
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
         if self.version == 4:
-            fee_growth_outside: int = self.stateview.functions.getTickFeeGrowthOutside(
+            fee_growth_outside: Dict = self.stateview.functions.getTickFeeGrowthOutside(
                 pool_id, tick
             ).call()
         else:
@@ -412,11 +413,11 @@ class Uniswap4:
 
     def get_tick_pool_info(
         self,
-        token0: AddressLike,
-        token1: AddressLike,
+        token0: str,
+        token1: str,
         fee: int,
         tick_spacing: int,
-        hooks: AddressLike,
+        hooks: str,
         tick: int,
     ) -> Dict:
         """
@@ -428,7 +429,7 @@ class Uniswap4:
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
         if self.version == 4:
-            tick_info: int = self.stateview.functions.getTickInfo(pool_id, tick).call()
+            tick_info: Dict = self.stateview.functions.getTickInfo(pool_id, tick).call()
         else:
             raise ValueError("Function is not supported for this version")
         return_value = {
@@ -442,11 +443,11 @@ class Uniswap4:
     # Tokens price functions
     def get_token_token_spot_price(
         self,
-        token0: AddressLike,
-        token1: AddressLike,
+        token0: str,
+        token1: str,
         fee: int = 500,
         tick_spacing: int = 10,
-        hooks: AddressLike = ZERO_HOOK,
+        hooks: str = ZERO_HOOK,
     ) -> float:
         """Current spot price for token to token trades."""
 
@@ -474,7 +475,7 @@ class Uniswap4:
         else:
             raise ValueError("Function is not supported for this version")
 
-        spot_price = (spot_price_x96 * spot_price_x96 * 10**den0 >> (96 * 2)) / (
+        spot_price: float = (spot_price_x96 * spot_price_x96 * 10**den0 >> (96 * 2)) / (
             10**den1
         )
         if not zero_for_one:
@@ -483,12 +484,12 @@ class Uniswap4:
 
     def get_quote_exact_input_single(
         self,
-        token0: AddressLike,
-        token1: AddressLike,
+        token0: str,
+        token1: str,
         qty: int,
         fee: int = 500,
         tick_spacing: int = 10,
-        hooks: AddressLike = ZERO_HOOK,
+        hooks: str = ZERO_HOOK,
         hook_data: bytes = bytes(),
     ) -> int:
         """Quote for token to token single hop trades with an exact input."""
@@ -560,14 +561,14 @@ class Uniswap4:
     # Estimates slippage for the given amount of token0
     def estimate_price_impact(
         self,
-        token0: AddressLike,
-        token1: AddressLike,
+        token0: str,
+        token1: str,
         qty: int,
         fee: int = 500,
         tick_spacing: int = 10,
-        hooks: AddressLike = ZERO_HOOK,
+        hooks: str = ZERO_HOOK,
         hook_data: bytes = bytes(),
-        route: Optional[List[AddressLike]] = None,
+        route: Optional[List[str]] = None,
     ) -> float:
         """
         Returns the estimated price impact as a positive float (0.01 = 1%).
@@ -605,19 +606,19 @@ class Uniswap4:
 
         # calculate and subtract the realised fees from the price impact.  See:
         # https://github.com/uniswap-python/uniswap-python/issues/310
-        price_impact_with_fees = (spot_price - price) / spot_price
-        fee_realised_percentage = realised_fee_percentage(fee, qty)
-        price_impact_real = price_impact_with_fees - fee_realised_percentage
+        price_impact_with_fees: float = (spot_price - price) / spot_price
+        fee_realised_percentage: float = realised_fee_percentage(fee, qty)
+        price_impact_real: float = price_impact_with_fees - fee_realised_percentage
         return price_impact_real
 
     def get_quote_exact_output_single(
         self,
-        token0: AddressLike,
-        token1: AddressLike,
+        token0: str,
+        token1: str,
         qty: int,
         fee: int = 500,
         tick_spacing: int = 10,
-        hooks: AddressLike = ZERO_HOOK,
+        hooks: str = ZERO_HOOK,
         hook_data: bytes = bytes(),
     ) -> int:
         """Quote for token to token single hop trades with an exact output."""
@@ -650,10 +651,10 @@ class Uniswap4:
         qty: int,
         qtycap: int,
         output_token: str,
-        recipient: Optional[AddressLike],
         fee: int,
         tick_spacing: int,
         hooks: str,
+        recipient: Optional[str] = None,
     ) -> HexBytes:
         if self.version == 4:
             if recipient is None:
@@ -725,14 +726,14 @@ class Uniswap4:
 
     def _token_to_token_swap_output(
         self,
-        input_token: AddressLike,
+        input_token: str,
         qty: int,
         qtycap: int,
-        output_token: AddressLike,
-        recipient: Optional[AddressLike],
+        output_token: str,
         fee: int,
         tick_spacing,
         hooks: AddressLike,
+        recipient: Optional[str] = None,
     ) -> HexBytes:
         if self.version == 4:
             if recipient is None:
@@ -851,12 +852,12 @@ class Uniswap4:
 
     def make_swap_input(
         self,
-        input_token: AddressLike,
-        output_token: AddressLike,
+        input_token: str,
+        output_token: str,
         qty: int,
         qtycap: int,
         swap_pool_key: PoolKey,
-        recipient: AddressLike = None,
+        recipient: Optional[str] = None,
         fee: int = 3000,
     ) -> HexBytes:
 
@@ -865,20 +866,20 @@ class Uniswap4:
             qty,
             qtycap,
             output_token,
-            recipient,
             swap_pool_key.fee,
             swap_pool_key.tick_spacing,
             swap_pool_key.hooks,
+            recipient,
         )
 
     def make_swap_output(
         self,
-        input_token: AddressLike,
-        output_token: AddressLike,
+        input_token: str,
+        output_token: str,
         qty: int,
         qtycap: int,
         swap_pool_key: PoolKey,
-        recipient: AddressLike = None,
+        recipient: Optional[str] = None,
         fee: int = 3000,
     ) -> HexBytes:
 
@@ -887,37 +888,37 @@ class Uniswap4:
             qty,
             qtycap,
             output_token,
-            recipient,
             swap_pool_key.fee,
             swap_pool_key.tick_spacing,
             swap_pool_key.hooks,
+            recipient,
         )
 
     def get_token_balance(self, erc20: AddressLike) -> Decimal:
 
         contract = _load_contract(self.w3, abi_name="erc20", address=erc20)
-        decimals = contract.functions.decimals().call()
+        decimals: int = contract.functions.decimals().call()
         try:
-            balance = contract.functions.balanceOf(self.address).call()
+            balance: int = contract.functions.balanceOf(self.address).call()
         except Exception:
-            balance = 0
-        balance = Decimal(balance) / (10**decimals)
-        return balance
+            balance: int = 0
+        return_balance: Decimal = Decimal(balance / (10**decimals))
+        return return_balance
 
     def get_balance(self) -> Decimal:
         """Get the balance of ETH for your address."""
         try:
-            balance = self.w3.eth.get_balance(self.address)
+            balance: int = self.w3.eth.get_balance(self.address)
         except Exception:
-            balance = 0
-        return balance
+            balance: int = 0
+        return Decimal(balance / (10**18))
 
     def _deadline(self) -> int:
         """Get a predefined deadline. 10min by default."""
         return int(time.time()) + 10 * 60
 
     def _build_and_send_tx(
-        self, function: ContractFunction, tx_params: Optional[dict] = None
+        self, function: ContractFunction, tx_params: Optional[TxParams] = None
     ) -> HexBytes:
         """Build and send a transaction."""
         if not tx_params:
