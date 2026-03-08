@@ -352,11 +352,11 @@ class V4pools:
             self.poolkeys_list.clear()
             root = tree.getroot()
             for item in root:
-                pool_currency0 = item[0].text
-                pool_currency1 = item[1].text
-                pool_fee = int(item[2].text)
-                pool_tick_spacing = int(item[3].text)
-                pool_hooks = item[4].text
+                pool_currency0 = str(item[0].text)
+                pool_currency1 = str(item[1].text)
+                pool_fee = int(str(item[2].text))
+                pool_tick_spacing = int(str(item[3].text))
+                pool_hooks = str(item[4].text)
                 pool: PoolKey = PoolKey(
                     pool_currency0,
                     pool_currency1,

@@ -15,6 +15,7 @@ from web3.types import (
     HexBytes,
     Nonce,
     TxParams,
+    Wei,
 )
 
 from .constants import (
@@ -171,10 +172,10 @@ class Uniswap4:
         if not self.post_merge:
             return {
                 "from": _addr_to_str(self.address),
-                "value": value,
+                "value": Wei(value),
                 "gas": int(self.gas_limit),
                 "gasPrice": Web3.to_wei(self.gas_price, "gwei"),
-                "nonce": max(self.last_nonce, 0),
+                "nonce": Nonce(max(self.last_nonce, 0)),
             }
         else:
             return {
@@ -184,8 +185,8 @@ class Uniswap4:
                 "maxFeePerGas": Web3.to_wei(self.gas_price, "gwei"),
                 "type": 2,
                 "chainId": self.w3.eth.chain_id,
-                "value": value,
-                "nonce": max(self.last_nonce, 0),
+                "value": Wei(value),
+                "nonce": Nonce(max(self.last_nonce, 0)),
             }
 
     # Gas customization
@@ -452,12 +453,12 @@ class Uniswap4:
         """Current spot price for token to token trades."""
 
         if token0.lower() < token1.lower():
-            den0 = self.get_token(token0).decimals
-            den1 = self.get_token(token1).decimals
+            den0 = self.get_token(_str_to_addr(token0)).decimals
+            den1 = self.get_token(_str_to_addr(token1)).decimals
             zero_for_one = True
         else:
-            den0 = self.get_token(token1).decimals
-            den1 = self.get_token(token0).decimals
+            den0 = self.get_token(_str_to_addr(token1)).decimals
+            den1 = self.get_token(_str_to_addr(token0)).decimals
             zero_for_one = False
 
         if token0 > token1:
@@ -658,7 +659,7 @@ class Uniswap4:
     ) -> HexBytes:
         if self.version == 4:
             if recipient is None:
-                recipient = self.address
+                recipient = str(self.address)
 
             min_tokens_bought = int((1 - self.max_slippage) * qtycap)
 
@@ -737,7 +738,7 @@ class Uniswap4:
     ) -> HexBytes:
         if self.version == 4:
             if recipient is None:
-                recipient = self.address
+                recipient = str(self.address)
 
             amount_in_max = int((1 + self.max_slippage) * qtycap)
 
@@ -817,7 +818,7 @@ class Uniswap4:
         """
         Replaces pending transaction with zero-value ETH transfer
         :param address_to Own address
-        Params gas_price and priority_fee are Gas Price and Max Priority Fee respectively; MUST be at least 20% more than values original tx has.
+        Params gas_price and priority_fee are Gas Price and Max Priority Fee respectively; MUST be at least 20% higher than values original tx has.
         """
         # This one is for legacy transactions
         signed_txn = self.w3.eth.account.sign_transaction(
@@ -898,19 +899,13 @@ class Uniswap4:
 
         contract = _load_contract(self.w3, abi_name="erc20", address=erc20)
         decimals: int = contract.functions.decimals().call()
-        try:
-            balance: int = contract.functions.balanceOf(self.address).call()
-        except Exception:
-            balance: int = 0
+        balance: int = contract.functions.balanceOf(self.address).call()
         return_balance: Decimal = Decimal(balance) / Decimal(10**decimals)
         return return_balance
 
     def get_balance(self) -> Decimal:
         """Get the balance of ETH for your address."""
-        try:
-            balance: int = self.w3.eth.get_balance(self.address)
-        except Exception:
-            balance: int = 0
+        balance: int = self.w3.eth.get_balance(self.address)
         return_balance: Decimal = Decimal(balance) / Decimal(10**18)
         return return_balance
 
