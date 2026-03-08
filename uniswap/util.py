@@ -257,10 +257,11 @@ class V4pools:
                 flush=True,
             )
             try:
-                logs = pool_manager_contract.events.Initialize().get_logs(
+                log_handler = pool_manager_contract.events.Initialize()
+                logs = log_handler.get_logs(
                     from_block=start_block,
                     to_block=end_block,
-                )
+                )  # type: ignore [attr-defined]
             except Exception:
                 # Exception occurs when chunk size value is too big so RPC rejects
                 # requests OR endpoint is down.
