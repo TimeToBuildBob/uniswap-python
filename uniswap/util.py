@@ -61,7 +61,7 @@ def _addr_to_str(a: AddressLike) -> str:
 
 
 def is_same_address(a1: Union[AddressLike, str], a2: Union[AddressLike, str]) -> bool:
-    return _str_to_addr(a1) == _str_to_addr(a2)
+    return bool(_str_to_addr(a1) == _str_to_addr(a2))
 
 
 def _validate_address(a: AddressLike) -> None:
@@ -261,7 +261,7 @@ class V4pools:
                 logs = log_handler.get_logs(
                     from_block=start_block,
                     to_block=end_block,
-                )  # type: ignore [attr-defined]
+                )
             except Exception:
                 # Exception occurs when chunk size value is too big so RPC rejects
                 # requests OR endpoint is down.

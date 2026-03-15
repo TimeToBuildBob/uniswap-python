@@ -199,3 +199,41 @@ _poolmanager_contract_addresses_v4 = {
     "monad": "0x188d586ddcf52439676ca21a244753fa19f9ea8e",
     "megaeth": "0xacb7e78fa05d562e0a5d3089ec896d57d057d38e",
 }
+
+_position_descriptor_contract_addresses_v4 = {
+    "mainnet": "0xd1428ba554f4c8450b763a0b2040a4935c63f06c",
+    "unichain": "0x9fb28449a191cd8c03a1b7abfb0f5996ecf7f722",
+    "optimism": "0xedd81496169c46df161b8513a52ffecaaaa66743",
+    "base": "0x25d093633990dc94bedeed76c8f3cdaa75f3e7d5",
+    "arbitrum": "0xe2023f3fa515cf070e07fd9d51c1d236e07843f4",
+    "polygon": "0x0892771f0c1b78ad6013d6e5536007e1c16e6794",
+    "blast": "0x0747ad2b2e1f5761b1dcf0d8672bd1ffc3676f97",
+    "zora": "0x7d64630bbb4993b5578dbd65e400961c9e68d55a",
+    "worldchain": "0x7da419153bd420b689f312363756d76836aeace4",
+    "ink": "0x42e3ccd9b7f67b5b2ee0c12074b84ccf2a8e7f36",
+    "soneium": "0x42e3ccd9b7f67b5b2ee0c12074b84ccf2a8e7f36",
+    "avalanche": "	0x2b1aed9445b05ac1a3b203eccc1e25dd9351f0a9",
+    "binance": "0xf0432f360703ec3d33931a8356a75a77d8d380e1",
+    "celo": "0x5727E22b25fEEe05E8dFa83C752B86F19D102D8A",
+    "monad": "0x5770d2914355a6d0a39a70aeea9bcce55df4201b",
+    "megaeth": "0xa9fdbb9d3dce2e1cfb91c4af1b8cf4ed62c0041a",
+}
+
+_position_manager_contract_addresses_v4 = {
+    "mainnet": "0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e",
+    "unichain": "0x4529a01c7a0410167c5740c487a8de60232617bf",
+    "optimism": "0x3c3ea4b57a46241e54610e5f022e5c45859a1017",
+    "base": "0x7c5f5a4bbd8fd63184577525326123b519429bdc",
+    "arbitrum": "0xd88f38f930b7952f2db2432cb002e7abbf3dd869",
+    "polygon": "0x1ec2ebf4f37e7363fdfe3551602425af0b3ceef9",
+    "blast": "0x4ad2f4cca2682cbb5b950d660dd458a1d3f1baad",
+    "zora": "0xf66c7b99e2040f0d9b326b3b7c152e9663543d63",
+    "worldchain": "0xc585e0f504613b5fbf874f21af14c65260fb41fa",
+    "ink": "0x1b35d13a2e2528f192637f14b05f0dc0e7deb566",
+    "soneium": "0x1b35d13a2e2528f192637f14b05f0dc0e7deb566",
+    "avalanche": "0xb74b1f14d2754acfcbbe1a221023a5cf50ab8acd",
+    "binance": "0x7a4a5c919ae2541aed11041a1aeee68f1287f95b",
+    "celo": "0xf7965f3981e4d5bc383bfbcb61501763e9068ca9",
+    "monad": "0x5b7ec4a94ff9bedb700fb82ab09d5846972f4016",
+    "megaeth": "0x9ae0921e981aaa7308f176f8d4f9129b9247c89d",
+}

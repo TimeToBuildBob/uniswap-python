@@ -23,6 +23,9 @@ from .constants import (
     ZERO_HOOK,
     _netid_to_name,
     _permit2_contract_addresses_v4,
+    _poolmanager_contract_addresses_v4,
+    _position_descriptor_contract_addresses_v4,
+    _position_manager_contract_addresses_v4,
     _quoter_contract_addresses_v4,
     _router_contract_addresses_v4,
     _stateview_contract_addresses_v4,
@@ -42,6 +45,10 @@ logger = logging.getLogger(__name__)
 
 
 class Uniswap4:
+    """
+    Wrapper around Uniswap v4 contracts.
+    """
+
     def __init__(
         self,
         address: Union[str, AddressLike],
@@ -109,11 +116,21 @@ class Uniswap4:
         router_address = _router_contract_addresses_v4[self.net_name]
         stateview_address = _stateview_contract_addresses_v4[self.net_name]
         permit2_address = _permit2_contract_addresses_v4[self.net_name]
+        position_descriptor_address = _position_descriptor_contract_addresses_v4[
+            self.net_name
+        ]
+        pool_manager_address = _poolmanager_contract_addresses_v4[self.net_name]
+        position_manager_address = _position_manager_contract_addresses_v4[
+            self.net_name
+        ]
 
         self.quoter_address = _str_to_addr(quoter_address)
         self.router_address = _str_to_addr(router_address)
         self.stateview_address = _str_to_addr(stateview_address)
         self.permit2_address = _str_to_addr(permit2_address)
+        self.position_descriptor_address = _str_to_addr(position_descriptor_address)
+        self.pool_manager_address = _str_to_addr(pool_manager_address)
+        self.position_manager_address = _str_to_addr(position_manager_address)
 
         self.quoter = _load_contract(
             self.w3, abi_name="uniswap-v4/quoter", address=self.quoter_address
@@ -126,6 +143,21 @@ class Uniswap4:
         )
         self.permit2 = _load_contract(
             self.w3, abi_name="uniswap-v4/permit2", address=self.permit2_address
+        )
+        self.position_descriptor = _load_contract(
+            self.w3,
+            abi_name="uniswap-v4/pos_descriptor",
+            address=self.position_descriptor_address,
+        )
+        self.pool_manager = _load_contract(
+            self.w3,
+            abi_name="uniswap-v4/poolmanager",
+            address=self.pool_manager_address,
+        )
+        self.position_manager = _load_contract(
+            self.w3,
+            abi_name="uniswap-v4/pos_manager",
+            address=self.position_manager_address,
         )
         return
 
@@ -211,7 +243,7 @@ class Uniswap4:
     def set_gas_priorityfee(self, priority_fee: float) -> None:
         self.priority_fee = priority_fee
 
-    # StateView calls
+    # StateView methods
     def get_fee_growth_globals(
         self,
         token0: str,
@@ -291,7 +323,7 @@ class Uniswap4:
             raise ValueError("Function is not supported for this version")
         return liquidity
 
-    def get_position_info(
+    def get_position_info_stateview(
         self,
         token0: str,
         token1: str,
@@ -440,6 +472,394 @@ class Uniswap4:
             "feeGrowthOutside1X128": tick_info[3],
         }
         return return_value
+
+    # PositionDescriptor methods
+    def get_currency_ratio_priority(self, currency: str) -> int:
+        """
+        For certain currencies on mainnet, the smaller the currency, the higher the priority.
+        And those with the higher priority values (more positive values) will be in the numerator of the price ratio
+
+        :returns: The priority of a currency.
+        """
+        if self.version == 4:
+            ratio_priority: int = int(
+                self.position_descriptor.functions.currencyRatioPriority(
+                    currency
+                ).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = ratio_priority
+        return return_value
+
+    def get_flip_ratio(self, currency0: str, currency1: str) -> bool:
+        """
+        :returns: True if currency0 has higher priority than currency1
+        """
+        if self.version == 4:
+            flip_ratio: bool = bool(
+                self.position_descriptor.functions.flipRatio(
+                    currency0, currency1
+                ).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = flip_ratio
+        return return_value
+
+    def get_native_currency_label(self) -> str:
+        """
+        :returns: The label for the native currency as a string
+        """
+        if self.version == 4:
+            native_currency_label: str = str(
+                self.position_descriptor.functions.nativeCurrencyLabel().call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = native_currency_label
+        return return_value
+
+    def get_pool_manager(self) -> str:
+        """
+        :returns: PoolManager address as a string
+        """
+        if self.version == 4:
+            pool_manager: str = str(
+                self.position_descriptor.functions.poolManager().call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = pool_manager
+        return return_value
+
+    def get_token_uri(self, pos_manager: str, token_id: int) -> str:
+        """
+        Produces the URI describing a particular token ID
+        Note this URI may be a data: URI with the JSON contents directly inlined
+
+        :returns: The URI of the ERC721-compliant metadata
+        """
+        if self.version == 4:
+            token_uri: str = str(
+                self.position_descriptor.functions.tokenURI(
+                    pos_manager, token_id
+                ).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = token_uri
+        return return_value
+
+    def get_wrapped_native_address(self) -> str:
+        """
+        :returns: The wrapped native currency address as a string
+        """
+        if self.version == 4:
+            wrapped_native_address: str = str(
+                self.position_descriptor.functions.wrappedNative().call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = wrapped_native_address
+        return return_value
+
+    # PositionManager methods
+    # Read methods
+    def get_domain_separator(
+        self,
+    ) -> bytes:
+        """
+        :returns: The domain separator for the current chain; bytes32
+        """
+        if self.version == 4:
+            domain_separator: bytes = bytes(
+                self.position_manager.functions.DOMAIN_SEPARATOR().call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = domain_separator
+        return return_value
+
+    def get_weth9(
+        self,
+    ) -> str:
+        """
+        :returns: The wrapped native token address
+        """
+        if self.version == 4:
+            weth9: str = str(self.position_manager.functions.WETH9().call())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = weth9
+        return return_value
+
+    def get_balance_of(self, address: str) -> int:
+        """
+        :returns: The number of tokens in owner's address.
+        """
+        if self.version == 4:
+            balance: int = int(
+                self.position_manager.functions.balanceOf(address).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = balance
+        return return_value
+
+    def get_approved(self, token_id: int) -> str:
+        """
+        :returns: The account approved for a token.
+        """
+        if self.version == 4:
+            operator: str = str(
+                self.position_manager.functions.getApproved(token_id).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = operator
+        return return_value
+
+    def get_pool_and_position_info(
+        self, token_id: int
+    ) -> Dict[str, Union[PoolKey, int]]:
+        """
+        :returns: The PoolKey class object and position info of a position
+        """
+        if self.version == 4:
+            pool_key_tuple, info = (
+                self.position_manager.functions.getPoolAndPositionInfo(
+                    self.position_manager.functions.positionLiquidity(token_id).call()
+                )
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        pool_key: PoolKey = PoolKey(*pool_key_tuple)
+        return_value = return_value = {
+            "poolKey": pool_key,
+            "info": info,
+        }
+        return return_value
+
+    def get_position_liquidity(self, token_id: int) -> int:
+        """
+        :returns: True if the operator is allowed to manage all of the assets of owner
+        """
+        if self.version == 4:
+            position_liquidity: int = int(
+                self.position_manager.functions.positionLiquidity(token_id).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = position_liquidity
+        return return_value
+
+    def get_is_approved_for_all(self, owner: str, operator: str) -> bool:
+        """
+        :returns: True if the operator is allowed to manage all of the assets of owner
+        """
+        if self.version == 4:
+            is_approved_for_all: bool = bool(
+                self.position_manager.functions.isApprovedForAll(owner, operator).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = is_approved_for_all
+        return return_value
+
+    def get_msg_sender(
+        self,
+    ) -> str:
+        """
+                :returns: address considered executor of the actions
+
+        The other context functions, _msgData and _msgValue, are not supported by this contract.
+        In many contracts this will be the address that calls the initial entry point
+        that calls `_executeActions` `msg.sender` shouldn't be used, as this will be
+        the v4 pool manager contract that calls `unlockCallback`
+        If using ReentrancyLock.sol, this function can return _getLocker()
+        """
+        if self.version == 4:
+            msg_sender: str = str(self.position_manager.functions.msgSender().call())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = msg_sender
+        return return_value
+
+    def get_name(
+        self,
+    ) -> str:
+        """
+        :returns: The name of the PositionManager token
+        """
+        if self.version == 4:
+            name: str = str(self.position_manager.functions.name().call())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = name
+        return return_value
+
+    def get_next_token_id(self, token_id: int) -> int:
+        """
+        :returns: The ID that will be used for the next minted liquidity position
+        """
+        if self.version == 4:
+            next_token_id: int = int(
+                self.position_manager.functions.nonces(token_id).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = next_token_id
+        return return_value
+
+    def get_nonces(self, owner: str, word: int) -> int:
+        """
+        :returns: Mapping of nonces consumed by each address, where a nonce is a single bit on the 256-bit bitmap
+        """
+        if self.version == 4:
+            bitmap: int = int(
+                self.position_manager.functions.nonces(owner, word).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = bitmap
+        return return_value
+
+    def get_owner_of(self, token_id: int) -> str:
+        """
+        :returns: The owner of the position for a given token ID
+        """
+        if self.version == 4:
+            owner: str = str(self.position_manager.functions.ownerOf(token_id).call())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = owner
+        return return_value
+
+    def get_permit2(
+        self,
+    ) -> str:
+        """
+        :returns: The owner of the position for a given token ID
+        """
+        if self.version == 4:
+            permit2: str = str(self.position_manager.functions.permit2().call())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = permit2
+        return return_value
+
+    def get_pool_keys(self, token_id: int) -> PoolKey:
+        """
+        :returns: The PoolKey class object for a given token ID
+        """
+        if self.version == 4:
+            pool_keys_tuple = self.position_manager.functions.poolKeys(token_id).call()
+            pool_keys: PoolKey = PoolKey(*pool_keys_tuple)
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = pool_keys
+        return return_value
+
+    def get_position_info(self, token_id: int) -> int:
+        """
+        :returns: The position info for a given token ID
+        """
+        if self.version == 4:
+            position_info: int = int(
+                self.position_manager.functions.positionInfo(token_id).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = position_info
+        return return_value
+
+    def get_subscriber(self, token_id: int) -> str:
+        """
+        :returns: The subscriber of the position for a given token ID
+        """
+        if self.version == 4:
+            subscriber: str = str(
+                self.position_manager.functions.subscriber(token_id).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = subscriber
+        return return_value
+
+    def get_is_support_interface(
+        self,
+        interface_id: bytes,
+    ) -> bool:
+        """
+        :param interface_id: The interface ID to check; should be bytes4
+        :returns: True if specifeid interface is supported by the PositionManager contract
+        """
+        if len(interface_id) != 4:
+            raise ValueError("interface_id should be 4 bytes long")
+        if self.version == 4:
+            is_supported: bool = bool(
+                self.position_manager.functions.supportsInterface(interface_id).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = is_supported
+        return return_value
+
+    def get_symbol(
+        self,
+    ) -> str:
+        """
+        :returns: The symbol of the PositionManager token
+        """
+        if self.version == 4:
+            symbol: str = str(self.position_manager.functions.symbol().call())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = symbol
+        return return_value
+
+    def get_token_descriptor(
+        self,
+    ) -> str:
+        """
+        :returns: The address of the PositionDescriptor contract as a string
+        """
+        if self.version == 4:
+            token_descriptor: str = str(
+                self.position_manager.functions.tokenDescriptor().call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = token_descriptor
+        return return_value
+
+    def get_position_uri(self, token_id: int) -> str:
+        """
+        :returns: The URI of the position manager's ERC721-compliant metadata for a given token ID
+        """
+        if self.version == 4:
+            uri: str = str(self.position_manager.functions.tokenURI(token_id).call())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = uri
+        return return_value
+
+    def get_unsubscribe_gas_limit(self) -> int:
+        """
+        :returns: The gas limit used when unsubscribing from a position.
+        """
+        if self.version == 4:
+            unsubscribe_gas_limit: int = (
+                self.position_manager.functions.unsubscribeGasLimit().call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = unsubscribe_gas_limit
+        return return_value
+
+    # Write methods
+    # pass
 
     # Tokens price functions
     def get_token_token_spot_price(
