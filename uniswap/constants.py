@@ -212,7 +212,7 @@ _position_descriptor_contract_addresses_v4 = {
     "worldchain": "0x7da419153bd420b689f312363756d76836aeace4",
     "ink": "0x42e3ccd9b7f67b5b2ee0c12074b84ccf2a8e7f36",
     "soneium": "0x42e3ccd9b7f67b5b2ee0c12074b84ccf2a8e7f36",
-    "avalanche": "	0x2b1aed9445b05ac1a3b203eccc1e25dd9351f0a9",
+    "avalanche": "0x2b1aed9445b05ac1a3b203eccc1e25dd9351f0a9",
     "binance": "0xf0432f360703ec3d33931a8356a75a77d8d380e1",
     "celo": "0x5727E22b25fEEe05E8dFa83C752B86F19D102D8A",
     "monad": "0x5770d2914355a6d0a39a70aeea9bcce55df4201b",

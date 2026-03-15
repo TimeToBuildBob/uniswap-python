@@ -2,106 +2,166 @@
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_logic",
+        "internalType": "contract IPoolManager",
+        "name": "_poolManager",
         "type": "address"
       },
       {
         "internalType": "address",
-        "name": "initialOwner",
+        "name": "_wrappedNative",
         "type": "address"
       },
       {
-        "internalType": "bytes",
-        "name": "_data",
-        "type": "bytes"
+        "internalType": "bytes32",
+        "name": "_nativeCurrencyLabelBytes",
+        "type": "bytes32"
       }
     ],
-    "stateMutability": "payable",
+    "stateMutability": "nonpayable",
     "type": "constructor"
   },
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "target",
-        "type": "address"
+        "internalType": "uint256",
+        "name": "len",
+        "type": "uint256"
       }
     ],
-    "name": "AddressEmptyCode",
+    "name": "InvalidAddressLength",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "InvalidTokenId",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "value",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "length",
+        "type": "uint256"
+      }
+    ],
+    "name": "StringsInsufficientHexLength",
     "type": "error"
   },
   {
     "inputs": [
       {
         "internalType": "address",
-        "name": "admin",
+        "name": "currency",
         "type": "address"
       }
     ],
-    "name": "ERC1967InvalidAdmin",
-    "type": "error"
+    "name": "currencyRatioPriority",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "",
+        "type": "int256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   },
   {
     "inputs": [
       {
         "internalType": "address",
-        "name": "implementation",
-        "type": "address"
-      }
-    ],
-    "name": "ERC1967InvalidImplementation",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "ERC1967NonPayable",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "FailedInnerCall",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "ProxyDeniedAdminAccess",
-    "type": "error"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "previousAdmin",
+        "name": "currency0",
         "type": "address"
       },
       {
-        "indexed": false,
         "internalType": "address",
-        "name": "newAdmin",
+        "name": "currency1",
         "type": "address"
       }
     ],
-    "name": "AdminChanged",
-    "type": "event"
+    "name": "flipRatio",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   },
   {
-    "anonymous": false,
+    "inputs": [],
+    "name": "nativeCurrencyLabel",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "poolManager",
+    "outputs": [
+      {
+        "internalType": "contract IPoolManager",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
-        "indexed": true,
+        "internalType": "contract IPositionManager",
+        "name": "positionManager",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "tokenURI",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "wrappedNative",
+    "outputs": [
+      {
         "internalType": "address",
-        "name": "implementation",
+        "name": "",
         "type": "address"
       }
     ],
-    "name": "Upgraded",
-    "type": "event"
-  },
-  {
-    "stateMutability": "payable",
-    "type": "fallback"
+    "stateMutability": "view",
+    "type": "function"
   }
 ]

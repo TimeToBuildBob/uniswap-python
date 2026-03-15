@@ -628,14 +628,12 @@ class Uniswap4:
         """
         if self.version == 4:
             pool_key_tuple, info = (
-                self.position_manager.functions.getPoolAndPositionInfo(
-                    self.position_manager.functions.positionLiquidity(token_id).call()
-                )
+                self.position_manager.functions.getPoolAndPositionInfo(token_id).call()
             )
         else:
             raise ValueError("Function is not supported for this version")
         pool_key: PoolKey = PoolKey(*pool_key_tuple)
-        return_value = return_value = {
+        return_value = {
             "poolKey": pool_key,
             "info": info,
         }
@@ -647,7 +645,7 @@ class Uniswap4:
         """
         if self.version == 4:
             position_liquidity: int = int(
-                self.position_manager.functions.positionLiquidity(token_id).call()
+                self.position_manager.functions.getPositionLiquidity(token_id).call()
             )
         else:
             raise ValueError("Function is not supported for this version")
@@ -699,13 +697,15 @@ class Uniswap4:
         return_value = name
         return return_value
 
-    def get_next_token_id(self, token_id: int) -> int:
+    def get_next_token_id(
+        self,
+    ) -> int:
         """
         :returns: The ID that will be used for the next minted liquidity position
         """
         if self.version == 4:
             next_token_id: int = int(
-                self.position_manager.functions.nonces(token_id).call()
+                self.position_manager.functions.nextTokenId().call()
             )
         else:
             raise ValueError("Function is not supported for this version")
