@@ -257,28 +257,32 @@ class V4pools:
                 flush=True,
             )
             try:
-                log_handler = pool_manager_contract.events.Initialize()
-                logs = log_handler.get_logs(
-                    from_block=start_block,
-                    to_block=end_block,
+                # filter_params = {
+                #     "fromBlock": str(start_block),
+                #     "toBlock": str(end_block),
+                # }
+                logs = pool_manager_contract.events.Initialize().get_logs(
+                    fromBlock=start_block, toBlock=end_block
                 )
-            except Exception:
+            except Exception as e:
                 # Exception occurs when chunk size value is too big so RPC rejects
                 # requests OR endpoint is down.
                 print(
                     "Couldn't retrieve logs; check chunk size and RPC availability. Aborted.              "
                 )
+                print(f"Error details: {e}")
                 return
             for log_item in logs:
                 try:
                     txn = self.web3.eth.get_transaction_receipt(
                         log_item.transactionHash
                     )
-                except Exception:
+                except Exception as e:
                     # Exception occurs when endpoint is down.
                     print(
                         "Couldn't retrieve transaction receipt; check RPC availability."
                     )
+                    print(f"Error details: {e}")
                     continue
 
                 if (
