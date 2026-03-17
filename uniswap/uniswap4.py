@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from dataclasses import astuple
 from decimal import Decimal
 from typing import Dict, List, Optional, Union
 
@@ -32,7 +33,14 @@ from .constants import (
 )
 from .exceptions import InvalidToken
 from .token import ERC20Token
-from .types import AddressLike, PoolKey
+from .types import (
+    AddressLike,
+    ModifyLiquidityParams,
+    PermitBatch,
+    PermitDetails,
+    PoolKey,
+    SwapParams,
+)
 from .util import (
     _addr_to_str,
     _load_abi,
@@ -68,8 +76,8 @@ class Uniswap4:
         :param provider: Can be optionally set to a Web3 provider URI. If none set, will fall back to the PROVIDER environment variable, or web3 if set.
         :param web3: Can be optionally set to a custom Web3 instance.
         :param version: Which version of the Uniswap contracts to use.
-        :param default_slippage: Default slippage for a trade, as a float (0.01 is 1%). WARNING: slippage is untested.
-        :param gas_limit: Maxumum gas amount allocated for transactions.
+        :param max_slippage: Maximum slippage for a trade, as a float (0.01 is 1%). WARNING: slippage is untested.
+        :param gas_limit: Maximum gas amount allocated for transactions.
         :param gas_price: Cost per unit of gas, in GWei.
         :param priority_fee: Amount of ETH to pay to the block producers, in GWei. Affects tx position in the block, the bigger value, the higher position is.
         :param post_merge: True is for post-Merge transations, False for legacy ones.
@@ -159,7 +167,6 @@ class Uniswap4:
             abi_name="uniswap-v4/pos_manager",
             address=self.position_manager_address,
         )
-        return
 
     def load_contract_with_abi(self, abi_name: str, address: AddressLike) -> Contract:
         return self.w3.eth.contract(address=address, abi=_load_abi(abi_name))
@@ -244,7 +251,7 @@ class Uniswap4:
         self.priority_fee = priority_fee
 
     # StateView methods
-    def get_fee_growth_globals(
+    def get_fee_growth_globals_stateview(
         self,
         token0: str,
         token1: str,
@@ -256,7 +263,7 @@ class Uniswap4:
         Retrieves the global fee growth of a pool.
         """
         if token0 > token1:
-            (token1, token0) = (token0, token1)
+            (token0, token1) = (token1, token0)
 
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
@@ -272,7 +279,7 @@ class Uniswap4:
         }
         return return_value
 
-    def get_fee_growth_inside(
+    def get_fee_growth_inside_stateview(
         self,
         token0: str,
         token1: str,
@@ -286,7 +293,7 @@ class Uniswap4:
         Calculates the fee growth inside a tick range of a pool
         """
         if token0 > token1:
-            (token1, token0) = (token0, token1)
+            token0, token1 = token1, token0
 
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
@@ -302,7 +309,7 @@ class Uniswap4:
         }
         return return_value
 
-    def get_liquidity(
+    def get_liquidity_stateview(
         self,
         token0: str,
         token1: str,
@@ -312,7 +319,7 @@ class Uniswap4:
     ) -> int:
         """Retrieves the total liquidity of a pool."""
         if token0 > token1:
-            (token1, token0) = (token0, token1)
+            token0, token1 = token1, token0
 
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
@@ -340,7 +347,7 @@ class Uniswap4:
         :param token_id is TokenID of the correspoding NFT
         """
         if token0 > token1:
-            (token1, token0) = (token0, token1)
+            token1, token0 = token0, token1
 
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
@@ -359,7 +366,7 @@ class Uniswap4:
         }
         return return_value
 
-    def get_slot0(
+    def get_slot0_stateview(
         self,
         token0: str,
         token1: str,
@@ -371,7 +378,7 @@ class Uniswap4:
         Returns current state of the pool.
         """
         if token0 > token1:
-            (token1, token0) = (token0, token1)
+            token1, token0 = token0, token1
 
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
@@ -388,7 +395,7 @@ class Uniswap4:
         }
         return return_value
 
-    def get_tick_bitmap(
+    def get_tick_bitmap_stateview(
         self,
         token0: str,
         token1: str,
@@ -402,7 +409,7 @@ class Uniswap4:
         :param tick MUST be int16
         """
         if token0 > token1:
-            (token1, token0) = (token0, token1)
+            token1, token0 = token0, token1
 
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
@@ -415,7 +422,7 @@ class Uniswap4:
             raise ValueError("Function is not supported for this version")
         return tick_bitmap
 
-    def get_tick_fee_growth_outside(
+    def get_tick_fee_growth_outside_stateview(
         self,
         token0: str,
         token1: str,
@@ -428,7 +435,7 @@ class Uniswap4:
         Retrieves the fee growth outside a tick range of a pool
         """
         if token0 > token1:
-            (token1, token0) = (token0, token1)
+            token1, token0 = token0, token1
 
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
@@ -444,7 +451,7 @@ class Uniswap4:
         }
         return return_value
 
-    def get_tick_pool_info(
+    def get_tick_pool_info_stateview(
         self,
         token0: str,
         token1: str,
@@ -457,7 +464,7 @@ class Uniswap4:
         Retrieves the tick information of a pool at a specific tick.
         """
         if token0 > token1:
-            (token1, token0) = (token0, token1)
+            token1, token0 = token0, token1
 
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
@@ -474,7 +481,7 @@ class Uniswap4:
         return return_value
 
     # PositionDescriptor methods
-    def get_currency_ratio_priority(self, currency: str) -> int:
+    def get_currency_ratio_priority_position_descriptor(self, currency: str) -> int:
         """
         For certain currencies on mainnet, the smaller the currency, the higher the priority.
         And those with the higher priority values (more positive values) will be in the numerator of the price ratio
@@ -492,7 +499,9 @@ class Uniswap4:
         return_value = ratio_priority
         return return_value
 
-    def get_flip_ratio(self, currency0: str, currency1: str) -> bool:
+    def get_flip_ratio_position_descriptor(
+        self, currency0: str, currency1: str
+    ) -> bool:
         """
         :returns: True if currency0 has higher priority than currency1
         """
@@ -507,7 +516,7 @@ class Uniswap4:
         return_value = flip_ratio
         return return_value
 
-    def get_native_currency_label(self) -> str:
+    def get_native_currency_label_position_descriptor(self) -> str:
         """
         :returns: The label for the native currency as a string
         """
@@ -520,7 +529,7 @@ class Uniswap4:
         return_value = native_currency_label
         return return_value
 
-    def get_pool_manager(self) -> str:
+    def get_pool_manager_position_descriptor(self) -> str:
         """
         :returns: PoolManager address as a string
         """
@@ -533,7 +542,7 @@ class Uniswap4:
         return_value = pool_manager
         return return_value
 
-    def get_token_uri(self, pos_manager: str, token_id: int) -> str:
+    def get_token_uri_position_descriptor(self, pos_manager: str, token_id: int) -> str:
         """
         Produces the URI describing a particular token ID
         Note this URI may be a data: URI with the JSON contents directly inlined
@@ -551,7 +560,7 @@ class Uniswap4:
         return_value = token_uri
         return return_value
 
-    def get_wrapped_native_address(self) -> str:
+    def get_wrapped_native_address_position_descriptor(self) -> str:
         """
         :returns: The wrapped native currency address as a string
         """
@@ -566,7 +575,7 @@ class Uniswap4:
 
     # PositionManager methods
     # Read methods
-    def get_domain_separator(
+    def get_domain_separator_position_manager(
         self,
     ) -> bytes:
         """
@@ -581,7 +590,7 @@ class Uniswap4:
         return_value = domain_separator
         return return_value
 
-    def get_weth9(
+    def get_weth9_position_manager(
         self,
     ) -> str:
         """
@@ -594,7 +603,7 @@ class Uniswap4:
         return_value = weth9
         return return_value
 
-    def get_balance_of(self, address: str) -> int:
+    def get_balance_of_position_manager(self, address: str) -> int:
         """
         :returns: The number of tokens in owner's address.
         """
@@ -607,7 +616,7 @@ class Uniswap4:
         return_value = balance
         return return_value
 
-    def get_approved(self, token_id: int) -> str:
+    def get_approved_position_manager(self, token_id: int) -> str:
         """
         :returns: The account approved for a token.
         """
@@ -620,7 +629,7 @@ class Uniswap4:
         return_value = operator
         return return_value
 
-    def get_pool_and_position_info(
+    def get_pool_and_position_info_position_manager(
         self, token_id: int
     ) -> Dict[str, Union[PoolKey, int]]:
         """
@@ -639,7 +648,7 @@ class Uniswap4:
         }
         return return_value
 
-    def get_position_liquidity(self, token_id: int) -> int:
+    def get_position_liquidity_position_manager(self, token_id: int) -> int:
         """
         :returns: True if the operator is allowed to manage all of the assets of owner
         """
@@ -652,7 +661,9 @@ class Uniswap4:
         return_value = position_liquidity
         return return_value
 
-    def get_is_approved_for_all(self, owner: str, operator: str) -> bool:
+    def get_is_approved_for_all_position_manager(
+        self, owner: str, operator: str
+    ) -> bool:
         """
         :returns: True if the operator is allowed to manage all of the assets of owner
         """
@@ -665,7 +676,7 @@ class Uniswap4:
         return_value = is_approved_for_all
         return return_value
 
-    def get_msg_sender(
+    def get_msg_sender_position_manager(
         self,
     ) -> str:
         """
@@ -684,7 +695,7 @@ class Uniswap4:
         return_value = msg_sender
         return return_value
 
-    def get_name(
+    def get_name_position_manager(
         self,
     ) -> str:
         """
@@ -697,7 +708,7 @@ class Uniswap4:
         return_value = name
         return return_value
 
-    def get_next_token_id(
+    def get_next_token_id_position_manager(
         self,
     ) -> int:
         """
@@ -712,7 +723,7 @@ class Uniswap4:
         return_value = next_token_id
         return return_value
 
-    def get_nonces(self, owner: str, word: int) -> int:
+    def get_nonces_position_manager(self, owner: str, word: int) -> int:
         """
         :returns: Mapping of nonces consumed by each address, where a nonce is a single bit on the 256-bit bitmap
         """
@@ -725,7 +736,7 @@ class Uniswap4:
         return_value = bitmap
         return return_value
 
-    def get_owner_of(self, token_id: int) -> str:
+    def get_owner_of_position_manager(self, token_id: int) -> str:
         """
         :returns: The owner of the position for a given token ID
         """
@@ -736,7 +747,7 @@ class Uniswap4:
         return_value = owner
         return return_value
 
-    def get_permit2(
+    def get_permit2_position_manager(
         self,
     ) -> str:
         """
@@ -749,7 +760,7 @@ class Uniswap4:
         return_value = permit2
         return return_value
 
-    def get_pool_keys(self, token_id: int) -> PoolKey:
+    def get_pool_keys_position_manager(self, token_id: int) -> PoolKey:
         """
         :returns: The PoolKey class object for a given token ID
         """
@@ -761,7 +772,7 @@ class Uniswap4:
         return_value = pool_keys
         return return_value
 
-    def get_position_info(self, token_id: int) -> int:
+    def get_position_info_position_manager(self, token_id: int) -> int:
         """
         :returns: The position info for a given token ID
         """
@@ -774,7 +785,7 @@ class Uniswap4:
         return_value = position_info
         return return_value
 
-    def get_subscriber(self, token_id: int) -> str:
+    def get_subscriber_position_manager(self, token_id: int) -> str:
         """
         :returns: The subscriber of the position for a given token ID
         """
@@ -787,7 +798,7 @@ class Uniswap4:
         return_value = subscriber
         return return_value
 
-    def get_is_support_interface(
+    def get_is_support_interface_position_manager(
         self,
         interface_id: bytes,
     ) -> bool:
@@ -806,7 +817,7 @@ class Uniswap4:
         return_value = is_supported
         return return_value
 
-    def get_symbol(
+    def get_symbol_position_manager(
         self,
     ) -> str:
         """
@@ -819,7 +830,7 @@ class Uniswap4:
         return_value = symbol
         return return_value
 
-    def get_token_descriptor(
+    def get_token_descriptor_position_manager(
         self,
     ) -> str:
         """
@@ -834,7 +845,7 @@ class Uniswap4:
         return_value = token_descriptor
         return return_value
 
-    def get_position_uri(self, token_id: int) -> str:
+    def get_position_uri_position_manager(self, token_id: int) -> str:
         """
         :returns: The URI of the position manager's ERC721-compliant metadata for a given token ID
         """
@@ -845,7 +856,7 @@ class Uniswap4:
         return_value = uri
         return return_value
 
-    def get_unsubscribe_gas_limit(self) -> int:
+    def get_unsubscribe_gas_limit_position_manager(self) -> int:
         """
         :returns: The gas limit used when unsubscribing from a position.
         """
@@ -859,7 +870,749 @@ class Uniswap4:
         return return_value
 
     # Write methods
-    # pass
+    def approve_position_manager(self, spender: str, token_id: int) -> HexBytes:
+        """
+        Change or reaffirm the approved address for an NFT
+        The zero address removes existing approval.
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.approve(spender, token_id)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def initialize_pool_position_manager(
+        self, pool_key: PoolKey, sqrt_price_x96: int, payable_amount: int
+    ) -> HexBytes:
+        """
+        Initialize a Uniswap v4 Pool with the given parameters.
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.initializePool(
+                astuple(pool_key), sqrt_price_x96
+            )
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def modify_liquidities_position_manager(
+        self, unlock_data: bytes, deadline: int, payable_amount: int
+    ) -> HexBytes:
+        """
+        Unlocks Uniswap v4 PoolManager and batches actions for modifying liquidity
+        """
+        # TODO: Need to implement plain increase/decrease and burn liquidity methods
+        if self.version == 4:
+            function = self.position_manager.functions.modifyLiquidities(
+                unlock_data, deadline
+            )
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def modify_liquidities_without_unlock_position_manager(
+        self, actions: bytes, params: List[bytes], payable_amount: int
+    ) -> HexBytes:
+        """
+        Batches actions for modifying liquidity without unlocking v4 PoolManager
+
+        This must be called by a contract that has already unlocked the v4 PoolManager
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.modifyLiquiditiesWithoutUnlock(
+                actions, params
+            )
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def multicall_position_manager(
+        self, data: List[bytes], payable_amount: int
+    ) -> HexBytes:
+        """
+        Call multiple functions in the current contract in a single transaction, with the possibility of sending ETH along with the calls.
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.multicall(data)
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def permit_position_manager(
+        self,
+        spender: str,
+        token_id: int,
+        deadline: int,
+        nonce: int,
+        signature: bytes,
+        payable_amount: int,
+    ) -> HexBytes:
+        """
+        Approve of a specific token ID for spending by spender via signature
+        """
+        # TODO: implement get_signature() method to generate the signature parameter for such functions
+        if self.version == 4:
+            function = self.position_manager.functions.permit(
+                spender, token_id, deadline, nonce, signature
+            )
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def permit2_single_position_manager(
+        self,
+        owner: str,
+        permit_single: PermitDetails,
+        spender: str,
+        sig_deadline: int,
+        signature: bytes,
+        payable_amount: int,
+    ) -> HexBytes:
+        """
+        allows forwarding a single permit to permit2
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.permit(
+                owner, (astuple(permit_single), spender, sig_deadline), signature
+            )
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def permit2_batch_position_manager(
+        self,
+        owner: str,
+        permit_batch: PermitBatch,
+        signature: bytes,
+        payable_amount: int,
+    ) -> HexBytes:
+        """
+        Allows forwarding batch permits to permit2
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.permit(
+                owner, astuple(permit_batch), signature
+            )
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def permit_for_all_position_manager(
+        self,
+        owner: str,
+        operator: str,
+        approved: bool,
+        deadline: int,
+        nonce: int,
+        signature: bytes,
+        payable_amount: int,
+    ) -> HexBytes:
+        """
+        Set an operator with full permission to an owner's tokens via signature
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.permitForAll(
+                owner, operator, approved, deadline, nonce, signature
+            )
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def revoke_nonce_position_manager(
+        self, nonce: int, payable_amount: int
+    ) -> HexBytes:
+        """
+        Revoke a nonce by spending it, preventing it from being used again
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.revokeNonce(nonce)
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def safe_transfer_from_position_manager(
+        self, from_addr: str, to_addr: str, token_id: int, payable_amount: int
+    ) -> HexBytes:
+        """
+        Transfer a position from one address to another
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.safeTransferFrom(
+                from_addr, to_addr, token_id
+            )
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def safe_transfer_from_with_data_position_manager(
+        self,
+        from_addr: str,
+        to_addr: str,
+        token_id: int,
+        data: bytes,
+        payable_amount: int,
+    ) -> HexBytes:
+        """
+        Transfer a position from one address to another with additional data
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.safeTransferFrom(
+                from_addr, to_addr, token_id, data
+            )
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def set_approval_for_all_position_manager(
+        self, operator: str, approved: bool, payable_amount: int
+    ) -> HexBytes:
+        """
+        Enable or disable approval for a third party ("operator") to manage all of `msg.sender`'s assets
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.setApprovalForAll(
+                operator, approved
+            )
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def subscribe_position_manager(
+        self, token_id: int, new_subscriber: str, data: bytes, payable_amount: int
+    ) -> HexBytes:
+        """
+        Enables the subscriber to receive notifications for a respective position
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.subscribe(
+                token_id, new_subscriber, data
+            )
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def transfer_from_position_manager(
+        self, from_addr: str, to_addr: str, token_id: int, payable_amount: int
+    ) -> HexBytes:
+        """
+        Overrides solmate transferFrom in case a notification to subscribers is needed
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.transferFrom(
+                from_addr, to_addr, token_id
+            )
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def unlock_callback_position_manager(self, data: bytes) -> HexBytes:
+        """
+        Called by the pool manager on `msg.sender` when the manager is unlocked
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.unlockCallback(data)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def unsubscribe_position_manager(
+        self, token_id: int, payable_amount: int
+    ) -> HexBytes:
+        """
+        Removes the subscriber from receiving notifications for a respective position
+        """
+        if self.version == 4:
+            function = self.position_manager.functions.unsubscribe(token_id)
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    # PoolManager methods
+    # Read methods
+    def get_allowance_pool_manager(
+        self, owner: str, spender: str, token_id: int
+    ) -> int:
+        """
+        Spender allowance of an id.
+        """
+        if self.version == 4:
+            allowance: int = int(
+                self.pool_manager.functions.allowance(owner, spender, token_id).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = allowance
+        return return_value
+
+    def get_balance_of_pool_manager(self, address: str, token_id: int) -> int:
+        """
+        The number of tokens in owner's address.
+        """
+        if self.version == 4:
+            balance: int = int(
+                self.pool_manager.functions.balanceOf(address, token_id).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = balance
+        return return_value
+
+    def get_extsload_pool_manager(self, slot: bytes) -> bytes:
+        """
+        Called by external contracts to access granular pool state
+        """
+        if self.version == 4:
+            value: bytes = self.pool_manager.functions.extsload(slot).call()
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = value
+        return return_value
+
+    def get_extsload_sequence_pool_manager(
+        self, start_slot: bytes, slots_count: int
+    ) -> List[bytes]:
+        """
+        Called by external contracts to access a sequence of storage slots
+        """
+        if self.version == 4:
+            value: List[bytes] = self.pool_manager.functions.extsload(
+                start_slot, slots_count
+            ).call()
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = value
+        return return_value
+
+    def get_extsload_sparse_pool_manager(self, slots: List[bytes]) -> List[bytes]:
+        """
+        Called by external contracts to access a sparse set of storage slots
+        """
+        if self.version == 4:
+            value: List[bytes] = self.pool_manager.functions.extsload(slots).call()
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = value
+        return return_value
+
+    def get_exttload_sparse_pool_manager(self, slots: List[bytes]) -> List[bytes]:
+        """
+        Called by external contracts to access sparse transient pool state
+        """
+        if self.version == 4:
+            value: List[bytes] = self.pool_manager.functions.exttload(slots).call()
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = value
+        return return_value
+
+    def get_exttload_pool_manager(self, slot: bytes) -> bytes:
+        """
+        Called by external contracts to access transient storage of the contract
+        """
+        if self.version == 4:
+            value: bytes = self.pool_manager.functions.exttload(slot).call()
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = value
+        return return_value
+
+    def get_is_operator_pool_manager(self, owner: str, operator: str) -> bool:
+        """
+        Checks if a spender is approved by an owner as an operator
+        """
+        if self.version == 4:
+            is_operator: bool = self.pool_manager.functions.isOperator(
+                owner, operator
+            ).call()
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = is_operator
+        return return_value
+
+    def get_owner_pool_manager(self) -> str:
+        """
+        Retrieve the contract owner.
+        """
+        if self.version == 4:
+            owner: str = str(self.pool_manager.functions.owner().call())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = owner
+        return return_value
+
+    def get_protocol_fee_controller_pool_manager(self) -> str:
+        """
+        Returns the current protocol fee controller address
+        """
+        if self.version == 4:
+            protocol_fee_controller: str = str(
+                self.pool_manager.functions.protocolFeeController().call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = protocol_fee_controller
+        return return_value
+
+    def get_protocol_fees_accrued_pool_manager(self, address: str) -> int:
+        """
+        Given a currency address, returns the protocol fees accrued in that currency.
+        """
+        if self.version == 4:
+            protocol_fees_accrued: int = int(
+                self.pool_manager.functions.protocolFeesAccrued(address).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = protocol_fees_accrued
+        return return_value
+
+    def get_supports_interface_pool_manager(self, interface_id: bytes) -> bool:
+        """
+        Checks if a given interface ID is supported by the contract
+        :param interface_id: The interface ID to check; should be bytes4
+        :returns: True if specifeid interface is supported by the PoolManager contract
+        """
+        if len(interface_id) != 4:
+            raise ValueError("interface_id should be 4 bytes long")
+        if self.version == 4:
+            supports_interface: bool = bool(
+                self.pool_manager.functions.supportsInterface(interface_id).call()
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return_value = supports_interface
+        return return_value
+
+    # Write methods
+    def approve_pool_manager(
+        self, spender: str, token_id: int, amount: int
+    ) -> HexBytes:
+        """
+        Approves an amount of an id to a spender.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.approve(spender, token_id, amount)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def burn_pool_manager(self, from_addr: str, token_id: int, amount: int) -> HexBytes:
+        """
+        Called by the user to move value from ERC6909 balance.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.burn(from_addr, token_id, amount)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def clear_pool_manager(self, currency: str, amount: int) -> HexBytes:
+        """
+        !!!WARNING!!! - Any currency that is cleared, will be non-retrievable, and locked in the contract permanently.
+        A call to clear will zero out a positive balance WITHOUT a corresponding transfer.
+        This could be used to clear a balance that is considered dust.
+        Additionally, the amount must be the exact positive balance.
+        This is to enforce that the caller is aware of the amount being cleared.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.clear(currency, amount)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def collect_protocol_fees_pool_manager(
+        self, recipient: str, currency: str, amount: int
+    ) -> HexBytes:
+        """
+        Collects the protocol fees for a given recipient and currency, returning the amount collected
+        This will revert if the contract is unlocked
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.collectProtocolFees(
+                recipient, currency, amount
+            )
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def donate_pool_manager(
+        self, pool_key: PoolKey, amount0: int, amount1: int, hook_data: bytes
+    ) -> HexBytes:
+        """
+        Donate the given currency amounts to the in-range liquidity providers of a pool
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.donate(
+                astuple(pool_key), amount0, amount1, hook_data
+            )
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def initialize_pool_manager(
+        self, pool_key: PoolKey, sqrt_price_x96: int
+    ) -> HexBytes:
+        """
+        Initialize the state for a given pool ID.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.initialize(
+                astuple(pool_key), sqrt_price_x96
+            )
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def mint_pool_manager(self, to_addr: str, token_id: int, amount: int) -> HexBytes:
+        """
+        Called by the user to move value into ERC6909 balance.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.mint(to_addr, token_id, amount)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def modify_liquidity_pool_manager(
+        self,
+        pool_key: PoolKey,
+        liquidity_params: ModifyLiquidityParams,
+        hook_data: bytes,
+    ) -> HexBytes:
+        """
+        Modify the liquidity for the given pool.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.modifyLiquidity(
+                astuple(pool_key), astuple(liquidity_params), hook_data
+            )
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def set_operator_pool_manager(self, operator: str, approved: bool) -> HexBytes:
+        """
+        Sets or removes an operator for the caller.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.setOperator(operator, approved)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def set_protocol_fee_pool_manager(
+        self, pool_key: PoolKey, new_protocol_fee: int
+    ) -> HexBytes:
+        """
+        Sets the protocol fee for the given pool.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.setProtocolFee(
+                astuple(pool_key), new_protocol_fee
+            )
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def set_protocol_fee_controller_pool_manager(self, controller: str) -> HexBytes:
+        """
+        Sets a new protocol fee controller.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.setProtocolFeeController(controller)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def settle_pool_manager(self, payable_amount: int) -> HexBytes:
+        """
+        Called by the user to pay what is owed.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.settle()
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def settle_for_pool_manager(self, recipient: str, payable_amount: int) -> HexBytes:
+        """
+        Called by the user to pay on behalf of another address.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.settleFor(recipient)
+            tx = self._build_and_send_tx(
+                function, self._get_tx_params(value=payable_amount)
+            )
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def swap_pool_manager(
+        self, pool_key: PoolKey, params: SwapParams, hook_data: bytes
+    ) -> HexBytes:
+        """
+        Swap against the given pool.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.swap(
+                astuple(pool_key), astuple(params), hook_data
+            )
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def sync_pool_manager(self, currency: str) -> HexBytes:
+        """
+        Writes the current ERC20 balance of the specified currency to transient storage.
+        This is used to checkpoint balances for the manager and derive deltas for the caller.
+        This MUST be called before any ERC20 tokens are sent into the contract, see documentation for more details.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.sync(currency)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def take_pool_manager(self, currency: str, to_addr: str, amount: int) -> HexBytes:
+        """
+        Called by the user to net out some value owed to the user.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.take(currency, to_addr, amount)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def transfer_pool_manager(
+        self, to_addr: str, token_id: int, amount: int
+    ) -> HexBytes:
+        """
+        Transfers an amount of an id from the caller to a receiver.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.transfer(to_addr, token_id, amount)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def transfer_from_pool_manager(
+        self, sender: str, receiver: str, token_id: int, amount: int
+    ) -> HexBytes:
+        """
+        Transfers an amount of an id from a sender to a receiver..
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.transferFrom(
+                sender, receiver, token_id, amount
+            )
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def transfer_ownership_pool_manager(self, new_owner: str) -> HexBytes:
+        """
+        Transfers ownership of the contract to a new owner.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.transferOwnership(new_owner)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def unlock_pool_manager(self, data: bytes) -> HexBytes:
+        """
+        All interactions on the contract that account deltas require unlocking.
+        A caller that calls `unlock` must implement `IUnlockCallback(msg.sender).unlockCallback(data)`,
+        where they interact with the remaining functions on this contract.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.unlock(data)
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
+
+    def update_dynamic_lp_fee_pool_manager(
+        self, pool_key: PoolKey, new_dynamic_lp_fee: int
+    ) -> HexBytes:
+        """
+        Updates the pools lp fees for the a pool that has enabled dynamic lp fees.
+        """
+        if self.version == 4:
+            function = self.pool_manager.functions.updateDynamicLPFee(
+                astuple(pool_key), new_dynamic_lp_fee
+            )
+            tx = self._build_and_send_tx(function, self._get_tx_params())
+        else:
+            raise ValueError("Function is not supported for this version")
+        return tx
 
     # Tokens price functions
     def get_token_token_spot_price(
@@ -890,7 +1643,7 @@ class Uniswap4:
         if self.version == 4:
             # spot_price_x96 : int =
             # self.stateview.functions.getSlot0(pool_id).call()[0]
-            spot_price_x96: int = self.get_slot0(
+            spot_price_x96: int = self.get_slot0_stateview(
                 token0, token1, fee, tick_spacing, hooks
             )["sqrtPriceX96"]
         else:
@@ -919,7 +1672,7 @@ class Uniswap4:
                 zero_for_one = True
             else:
                 zero_for_one = False
-                (token1, token0) = (token0, token1)
+                (token0, token1) = (token1, token0)
             pool_key = (token0, token1, fee, tick_spacing, hooks)
             # [0]=The output quote [1]=estimated gas units used for the swap
             quote_amount: int = self.quoter.functions.quoteExactInputSingle(
@@ -1213,7 +1966,7 @@ class Uniswap4:
             )
 
             # ENCODING DATA
-            params = (exact_output_single_params, settle_all_params, take_all_params)
+            params = [exact_output_single_params, settle_all_params, take_all_params]
             inputs = []
             inputs.append(
                 encode(
