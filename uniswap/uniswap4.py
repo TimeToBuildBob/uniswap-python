@@ -37,7 +37,7 @@ from .types import (
     AddressLike,
     ModifyLiquidityParams,
     PermitBatch,
-    PermitDetails,
+    PermitSingle,
     PoolKey,
     SwapParams,
 )
@@ -978,7 +978,7 @@ class Uniswap4:
     def permit2_single_position_manager(
         self,
         owner: str,
-        permit_single: PermitDetails,
+        permit_single: PermitSingle,
         spender: str,
         sig_deadline: int,
         signature: bytes,
@@ -989,7 +989,7 @@ class Uniswap4:
         """
         if self.version == 4:
             function = self.position_manager.functions.permit(
-                owner, (astuple(permit_single), spender, sig_deadline), signature
+                owner, astuple(permit_single), signature
             )
             tx = self._build_and_send_tx(
                 function, self._get_tx_params(value=payable_amount)
@@ -1144,17 +1144,6 @@ class Uniswap4:
             tx = self._build_and_send_tx(
                 function, self._get_tx_params(value=payable_amount)
             )
-        else:
-            raise ValueError("Function is not supported for this version")
-        return tx
-
-    def unlock_callback_position_manager(self, data: bytes) -> HexBytes:
-        """
-        Called by the pool manager on `msg.sender` when the manager is unlocked
-        """
-        if self.version == 4:
-            function = self.position_manager.functions.unlockCallback(data)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
         else:
             raise ValueError("Function is not supported for this version")
         return tx

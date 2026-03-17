@@ -257,11 +257,13 @@ class V4pools:
                 flush=True,
             )
             try:
-                filter_params = {
-                    "fromBlock": str(start_block),
-                    "toBlock": str(end_block),
-                }
-                logs = pool_manager_contract.events.Initialize().get_logs(filter_params)
+                # filter_params = {
+                #     "fromBlock": str(start_block),
+                #     "toBlock": str(end_block),
+                # }
+                logs = pool_manager_contract.events.Initialize().get_logs(
+                    fromBlock=start_block, toBlock=end_block
+                )
             except Exception as e:
                 # Exception occurs when chunk size value is too big so RPC rejects
                 # requests OR endpoint is down.

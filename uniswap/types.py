@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Union
+from typing import List, Union
 
 from eth_typing.evm import Address, ChecksumAddress
 
@@ -18,15 +18,22 @@ class PoolKey:
 
 @dataclass
 class PermitDetails:
-    token_id: str
+    token: str
     amount: int
     expiration: int
     nonce: int
 
 
 @dataclass
+class PermitSingle:
+    details: PermitDetails
+    spender: str
+    sig_deadline: int
+
+
+@dataclass
 class PermitBatch:
-    details: list[PermitDetails]
+    details: List[PermitDetails]
     spender: str
     sig_deadline: int
 
