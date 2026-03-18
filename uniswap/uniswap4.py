@@ -74,7 +74,6 @@ class Uniswap4:
         :param private_key: The private key of the ETH wallet to use.
         :param provider: Can be optionally set to a Web3 provider URI. If none set, will fall back to the PROVIDER environment variable, or web3 if set.
         :param web3: Can be optionally set to a custom Web3 instance.
-        :param version: Which version of the Uniswap contracts to use.
         :param max_slippage: Maximum slippage for a trade, as a float (0.01 is 1%).
         :param gas_limit: Maximum gas amount allocated for transactions.
         :param gas_price: Cost per unit of gas, in GWei.
@@ -1437,7 +1436,8 @@ class Uniswap4:
             name = _name
         try:
             symbol = _symbol.decode()
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error occurred while decoding symbol for {address}: {e}")
             symbol = _symbol
         return ERC20Token(symbol, address, name, decimals)
 
