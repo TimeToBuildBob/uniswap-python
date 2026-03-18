@@ -63,8 +63,7 @@ class Uniswap4:
         private_key: Optional[str],
         provider: Optional[str] = None,
         web3: Optional[Web3] = None,
-        version: int = 4,
-        max_slippage: float = 0.1,
+        max_slippage: float = 0.01,
         gas_limit: float = 250000.0,
         gas_price: float = 1.80,
         priority_fee: float = 1.0,
@@ -75,8 +74,7 @@ class Uniswap4:
         :param private_key: The private key of the ETH wallet to use.
         :param provider: Can be optionally set to a Web3 provider URI. If none set, will fall back to the PROVIDER environment variable, or web3 if set.
         :param web3: Can be optionally set to a custom Web3 instance.
-        :param version: Which version of the Uniswap contracts to use.
-        :param max_slippage: Maximum slippage for a trade, as a float (0.01 is 1%). WARNING: slippage is untested.
+        :param max_slippage: Maximum slippage for a trade, as a float (0.01 is 1%).
         :param gas_limit: Maximum gas amount allocated for transactions.
         :param gas_price: Cost per unit of gas, in GWei.
         :param priority_fee: Amount of ETH to pay to the block producers, in GWei. Affects tx position in the block, the bigger value, the higher position is.
@@ -87,7 +85,6 @@ class Uniswap4:
             _str_to_addr(address) if isinstance(address, str) else address
         )
         self.private_key = private_key
-        self.version = version
 
         self.max_slippage = max_slippage
 
@@ -118,8 +115,9 @@ class Uniswap4:
         self.priority_fee = priority_fee
 
         chain_id = int(self.w3.net.version)
+        self.net_id = chain_id
         self.net_name = _netid_to_name[chain_id]
-
+        logger.info(f"Using {self.w3} ('{self.net_name}', netid: {self.net_id})")
         quoter_address = _quoter_contract_addresses_v4[self.net_name]
         router_address = _router_contract_addresses_v4[self.net_name]
         stateview_address = _stateview_contract_addresses_v4[self.net_name]
@@ -178,18 +176,18 @@ class Uniswap4:
         self, token: AddressLike, max_approval: Optional[int] = None
     ) -> HexBytes:
         """Give an PERMIT2 approval of a token."""
-        if token != ETH_ADDRESS:
+        if _addr_to_str(token) != ETH_ADDRESS:
             max_approval = self.max_approval_int if not max_approval else max_approval
             function = self.erc20_contract(token).functions.approve(
                 _addr_to_str(self.permit2_address), max_approval
             )
-            print(f"Approving {_addr_to_str(token)} for PERMIT2...")
+            logger.info(f"Approving {_addr_to_str(token)} for PERMIT2...")
             tx = self._build_and_send_tx(function)
             time.sleep(7)
         # Give an exchange/router max approval of a token.
         max_approval = 2**100 - 1
         expiration: int = int(10**12)
-        print(f"Setting permit for {_addr_to_str(token)} at router contract...")
+        logger.info(f"Setting permit for {_addr_to_str(token)} at router contract...")
         function = self.permit2.functions.approve(
             _str_to_addr(token), self.router_address, max_approval, expiration
         )
@@ -267,12 +265,9 @@ class Uniswap4:
 
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
-        if self.version == 4:
-            fee_growth_globals: Dict = self.stateview.functions.getFeeGrowthGlobals(
-                pool_id
-            ).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        fee_growth_globals: Dict = self.stateview.functions.getFeeGrowthGlobals(
+            pool_id
+        ).call()
         return_value = {
             "feeGrowthGlobal0": fee_growth_globals[0],
             "feeGrowthGlobal1": fee_growth_globals[1],
@@ -297,12 +292,9 @@ class Uniswap4:
 
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
-        if self.version == 4:
-            fee_growth_inside: Dict = self.stateview.functions.getFeeGrowthInside(
-                pool_id, tick_lower, tick_upper
-            ).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        fee_growth_inside: Dict = self.stateview.functions.getFeeGrowthInside(
+            pool_id, tick_lower, tick_upper
+        ).call()
         return_value = {
             "feeGrowthInside0X128": fee_growth_inside[0],
             "feeGrowthInside1X128": fee_growth_inside[1],
@@ -324,10 +316,7 @@ class Uniswap4:
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
 
-        if self.version == 4:
-            liquidity: int = self.stateview.functions.getLiquidity(pool_id).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        liquidity: int = self.stateview.functions.getLiquidity(pool_id).call()
         return liquidity
 
     def get_position_info_stateview(
@@ -353,12 +342,9 @@ class Uniswap4:
         pool_id = self.get_pool_id(pool)
 
         salt = HexBytes(token_id.to_bytes(32, byteorder="big"))
-        if self.version == 4:
-            position_info: Dict = self.stateview.functions.getPositionInfo(
-                pool_id, owner, tick_lower, tick_upper, salt
-            ).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        position_info: Dict = self.stateview.functions.getPositionInfo(
+            pool_id, owner, tick_lower, tick_upper, salt
+        ).call()
         return_value = {
             "liquidity": position_info[0],
             "feeGrowthInside0LastX128": position_info[1],
@@ -383,10 +369,7 @@ class Uniswap4:
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
 
-        if self.version == 4:
-            slot: Dict = self.stateview.functions.getSlot0(pool_id).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        slot: Dict = self.stateview.functions.getSlot0(pool_id).call()
         return_value = {
             "sqrtPriceX96": slot[0],
             "tick": slot[1],
@@ -414,12 +397,7 @@ class Uniswap4:
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
 
-        if self.version == 4:
-            tick_bitmap: int = self.stateview.functions.getTickBitmap(
-                pool_id, tick
-            ).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        tick_bitmap: int = self.stateview.functions.getTickBitmap(pool_id, tick).call()
         return tick_bitmap
 
     def get_tick_fee_growth_outside_stateview(
@@ -439,12 +417,9 @@ class Uniswap4:
 
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
-        if self.version == 4:
-            fee_growth_outside: Dict = self.stateview.functions.getTickFeeGrowthOutside(
-                pool_id, tick
-            ).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        fee_growth_outside: Dict = self.stateview.functions.getTickFeeGrowthOutside(
+            pool_id, tick
+        ).call()
         return_value = {
             "feeGrowthInside0X128": fee_growth_outside[0],
             "feeGrowthInside1X128": fee_growth_outside[1],
@@ -468,10 +443,7 @@ class Uniswap4:
 
         pool = PoolKey(token0, token1, fee, tick_spacing, hooks)
         pool_id = self.get_pool_id(pool)
-        if self.version == 4:
-            tick_info: Dict = self.stateview.functions.getTickInfo(pool_id, tick).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        tick_info: Dict = self.stateview.functions.getTickInfo(pool_id, tick).call()
         return_value = {
             "liquidityGross": tick_info[0],
             "liquidityNet": tick_info[1],
@@ -488,14 +460,9 @@ class Uniswap4:
 
         :returns: The priority of a currency.
         """
-        if self.version == 4:
-            ratio_priority: int = int(
-                self.position_descriptor.functions.currencyRatioPriority(
-                    currency
-                ).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        ratio_priority: int = int(
+            self.position_descriptor.functions.currencyRatioPriority(currency).call()
+        )
         return_value = ratio_priority
         return return_value
 
@@ -505,14 +472,9 @@ class Uniswap4:
         """
         :returns: True if currency0 has higher priority than currency1
         """
-        if self.version == 4:
-            flip_ratio: bool = bool(
-                self.position_descriptor.functions.flipRatio(
-                    currency0, currency1
-                ).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        flip_ratio: bool = bool(
+            self.position_descriptor.functions.flipRatio(currency0, currency1).call()
+        )
         return_value = flip_ratio
         return return_value
 
@@ -520,12 +482,9 @@ class Uniswap4:
         """
         :returns: The label for the native currency as a string
         """
-        if self.version == 4:
-            native_currency_label: str = str(
-                self.position_descriptor.functions.nativeCurrencyLabel().call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        native_currency_label: str = str(
+            self.position_descriptor.functions.nativeCurrencyLabel().call()
+        )
         return_value = native_currency_label
         return return_value
 
@@ -533,12 +492,7 @@ class Uniswap4:
         """
         :returns: PoolManager address as a string
         """
-        if self.version == 4:
-            pool_manager: str = str(
-                self.position_descriptor.functions.poolManager().call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        pool_manager: str = str(self.position_descriptor.functions.poolManager().call())
         return_value = pool_manager
         return return_value
 
@@ -549,14 +503,9 @@ class Uniswap4:
 
         :returns: The URI of the ERC721-compliant metadata
         """
-        if self.version == 4:
-            token_uri: str = str(
-                self.position_descriptor.functions.tokenURI(
-                    pos_manager, token_id
-                ).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        token_uri: str = str(
+            self.position_descriptor.functions.tokenURI(pos_manager, token_id).call()
+        )
         return_value = token_uri
         return return_value
 
@@ -564,12 +513,9 @@ class Uniswap4:
         """
         :returns: The wrapped native currency address as a string
         """
-        if self.version == 4:
-            wrapped_native_address: str = str(
-                self.position_descriptor.functions.wrappedNative().call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        wrapped_native_address: str = str(
+            self.position_descriptor.functions.wrappedNative().call()
+        )
         return_value = wrapped_native_address
         return return_value
 
@@ -581,12 +527,9 @@ class Uniswap4:
         """
         :returns: The domain separator for the current chain; bytes32
         """
-        if self.version == 4:
-            domain_separator: bytes = bytes(
-                self.position_manager.functions.DOMAIN_SEPARATOR().call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        domain_separator: bytes = bytes(
+            self.position_manager.functions.DOMAIN_SEPARATOR().call()
+        )
         return_value = domain_separator
         return return_value
 
@@ -596,10 +539,7 @@ class Uniswap4:
         """
         :returns: The wrapped native token address
         """
-        if self.version == 4:
-            weth9: str = str(self.position_manager.functions.WETH9().call())
-        else:
-            raise ValueError("Function is not supported for this version")
+        weth9: str = str(self.position_manager.functions.WETH9().call())
         return_value = weth9
         return return_value
 
@@ -607,12 +547,7 @@ class Uniswap4:
         """
         :returns: The number of tokens in owner's address.
         """
-        if self.version == 4:
-            balance: int = int(
-                self.position_manager.functions.balanceOf(address).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        balance: int = int(self.position_manager.functions.balanceOf(address).call())
         return_value = balance
         return return_value
 
@@ -620,12 +555,9 @@ class Uniswap4:
         """
         :returns: The account approved for a token.
         """
-        if self.version == 4:
-            operator: str = str(
-                self.position_manager.functions.getApproved(token_id).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        operator: str = str(
+            self.position_manager.functions.getApproved(token_id).call()
+        )
         return_value = operator
         return return_value
 
@@ -635,12 +567,9 @@ class Uniswap4:
         """
         :returns: The PoolKey class object and position info of a position
         """
-        if self.version == 4:
-            pool_key_tuple, info = (
-                self.position_manager.functions.getPoolAndPositionInfo(token_id).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        pool_key_tuple, info = self.position_manager.functions.getPoolAndPositionInfo(
+            token_id
+        ).call()
         pool_key: PoolKey = PoolKey(*pool_key_tuple)
         return_value = {
             "poolKey": pool_key,
@@ -652,12 +581,9 @@ class Uniswap4:
         """
         :returns: True if the operator is allowed to manage all of the assets of owner
         """
-        if self.version == 4:
-            position_liquidity: int = int(
-                self.position_manager.functions.getPositionLiquidity(token_id).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        position_liquidity: int = int(
+            self.position_manager.functions.getPositionLiquidity(token_id).call()
+        )
         return_value = position_liquidity
         return return_value
 
@@ -667,12 +593,9 @@ class Uniswap4:
         """
         :returns: True if the operator is allowed to manage all of the assets of owner
         """
-        if self.version == 4:
-            is_approved_for_all: bool = bool(
-                self.position_manager.functions.isApprovedForAll(owner, operator).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        is_approved_for_all: bool = bool(
+            self.position_manager.functions.isApprovedForAll(owner, operator).call()
+        )
         return_value = is_approved_for_all
         return return_value
 
@@ -688,10 +611,7 @@ class Uniswap4:
         the v4 pool manager contract that calls `unlockCallback`
         If using ReentrancyLock.sol, this function can return _getLocker()
         """
-        if self.version == 4:
-            msg_sender: str = str(self.position_manager.functions.msgSender().call())
-        else:
-            raise ValueError("Function is not supported for this version")
+        msg_sender: str = str(self.position_manager.functions.msgSender().call())
         return_value = msg_sender
         return return_value
 
@@ -701,10 +621,7 @@ class Uniswap4:
         """
         :returns: The name of the PositionManager token
         """
-        if self.version == 4:
-            name: str = str(self.position_manager.functions.name().call())
-        else:
-            raise ValueError("Function is not supported for this version")
+        name: str = str(self.position_manager.functions.name().call())
         return_value = name
         return return_value
 
@@ -714,12 +631,7 @@ class Uniswap4:
         """
         :returns: The ID that will be used for the next minted liquidity position
         """
-        if self.version == 4:
-            next_token_id: int = int(
-                self.position_manager.functions.nextTokenId().call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        next_token_id: int = int(self.position_manager.functions.nextTokenId().call())
         return_value = next_token_id
         return return_value
 
@@ -727,12 +639,7 @@ class Uniswap4:
         """
         :returns: Mapping of nonces consumed by each address, where a nonce is a single bit on the 256-bit bitmap
         """
-        if self.version == 4:
-            bitmap: int = int(
-                self.position_manager.functions.nonces(owner, word).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        bitmap: int = int(self.position_manager.functions.nonces(owner, word).call())
         return_value = bitmap
         return return_value
 
@@ -740,10 +647,7 @@ class Uniswap4:
         """
         :returns: The owner of the position for a given token ID
         """
-        if self.version == 4:
-            owner: str = str(self.position_manager.functions.ownerOf(token_id).call())
-        else:
-            raise ValueError("Function is not supported for this version")
+        owner: str = str(self.position_manager.functions.ownerOf(token_id).call())
         return_value = owner
         return return_value
 
@@ -753,10 +657,7 @@ class Uniswap4:
         """
         :returns: The owner of the position for a given token ID
         """
-        if self.version == 4:
-            permit2: str = str(self.position_manager.functions.permit2().call())
-        else:
-            raise ValueError("Function is not supported for this version")
+        permit2: str = str(self.position_manager.functions.permit2().call())
         return_value = permit2
         return return_value
 
@@ -764,11 +665,8 @@ class Uniswap4:
         """
         :returns: The PoolKey class object for a given token ID
         """
-        if self.version == 4:
-            pool_keys_tuple = self.position_manager.functions.poolKeys(token_id).call()
-            pool_keys: PoolKey = PoolKey(*pool_keys_tuple)
-        else:
-            raise ValueError("Function is not supported for this version")
+        pool_keys_tuple = self.position_manager.functions.poolKeys(token_id).call()
+        pool_keys: PoolKey = PoolKey(*pool_keys_tuple)
         return_value = pool_keys
         return return_value
 
@@ -776,12 +674,9 @@ class Uniswap4:
         """
         :returns: The position info for a given token ID
         """
-        if self.version == 4:
-            position_info: int = int(
-                self.position_manager.functions.positionInfo(token_id).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        position_info: int = int(
+            self.position_manager.functions.positionInfo(token_id).call()
+        )
         return_value = position_info
         return return_value
 
@@ -789,12 +684,9 @@ class Uniswap4:
         """
         :returns: The subscriber of the position for a given token ID
         """
-        if self.version == 4:
-            subscriber: str = str(
-                self.position_manager.functions.subscriber(token_id).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        subscriber: str = str(
+            self.position_manager.functions.subscriber(token_id).call()
+        )
         return_value = subscriber
         return return_value
 
@@ -808,12 +700,9 @@ class Uniswap4:
         """
         if len(interface_id) != 4:
             raise ValueError("interface_id should be 4 bytes long")
-        if self.version == 4:
-            is_supported: bool = bool(
-                self.position_manager.functions.supportsInterface(interface_id).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        is_supported: bool = bool(
+            self.position_manager.functions.supportsInterface(interface_id).call()
+        )
         return_value = is_supported
         return return_value
 
@@ -823,10 +712,7 @@ class Uniswap4:
         """
         :returns: The symbol of the PositionManager token
         """
-        if self.version == 4:
-            symbol: str = str(self.position_manager.functions.symbol().call())
-        else:
-            raise ValueError("Function is not supported for this version")
+        symbol: str = str(self.position_manager.functions.symbol().call())
         return_value = symbol
         return return_value
 
@@ -836,12 +722,9 @@ class Uniswap4:
         """
         :returns: The address of the PositionDescriptor contract as a string
         """
-        if self.version == 4:
-            token_descriptor: str = str(
-                self.position_manager.functions.tokenDescriptor().call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        token_descriptor: str = str(
+            self.position_manager.functions.tokenDescriptor().call()
+        )
         return_value = token_descriptor
         return return_value
 
@@ -849,10 +732,7 @@ class Uniswap4:
         """
         :returns: The URI of the position manager's ERC721-compliant metadata for a given token ID
         """
-        if self.version == 4:
-            uri: str = str(self.position_manager.functions.tokenURI(token_id).call())
-        else:
-            raise ValueError("Function is not supported for this version")
+        uri: str = str(self.position_manager.functions.tokenURI(token_id).call())
         return_value = uri
         return return_value
 
@@ -860,12 +740,9 @@ class Uniswap4:
         """
         :returns: The gas limit used when unsubscribing from a position.
         """
-        if self.version == 4:
-            unsubscribe_gas_limit: int = (
-                self.position_manager.functions.unsubscribeGasLimit().call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        unsubscribe_gas_limit: int = (
+            self.position_manager.functions.unsubscribeGasLimit().call()
+        )
         return_value = unsubscribe_gas_limit
         return return_value
 
@@ -875,11 +752,8 @@ class Uniswap4:
         Change or reaffirm the approved address for an NFT
         The zero address removes existing approval.
         """
-        if self.version == 4:
-            function = self.position_manager.functions.approve(spender, token_id)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.approve(spender, token_id)
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def initialize_pool_position_manager(
@@ -888,15 +762,12 @@ class Uniswap4:
         """
         Initialize a Uniswap v4 Pool with the given parameters.
         """
-        if self.version == 4:
-            function = self.position_manager.functions.initializePool(
-                astuple(pool_key), sqrt_price_x96
-            )
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.initializePool(
+            astuple(pool_key), sqrt_price_x96
+        )
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def modify_liquidities_position_manager(
@@ -906,15 +777,12 @@ class Uniswap4:
         Unlocks Uniswap v4 PoolManager and batches actions for modifying liquidity
         """
         # TODO: Need to implement plain increase/decrease and burn liquidity methods
-        if self.version == 4:
-            function = self.position_manager.functions.modifyLiquidities(
-                unlock_data, deadline
-            )
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.modifyLiquidities(
+            unlock_data, deadline
+        )
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def modify_liquidities_without_unlock_position_manager(
@@ -925,15 +793,12 @@ class Uniswap4:
 
         This must be called by a contract that has already unlocked the v4 PoolManager
         """
-        if self.version == 4:
-            function = self.position_manager.functions.modifyLiquiditiesWithoutUnlock(
-                actions, params
-            )
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.modifyLiquiditiesWithoutUnlock(
+            actions, params
+        )
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def multicall_position_manager(
@@ -942,13 +807,10 @@ class Uniswap4:
         """
         Call multiple functions in the current contract in a single transaction, with the possibility of sending ETH along with the calls.
         """
-        if self.version == 4:
-            function = self.position_manager.functions.multicall(data)
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.multicall(data)
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def permit_position_manager(
@@ -964,15 +826,12 @@ class Uniswap4:
         Approve of a specific token ID for spending by spender via signature
         """
         # TODO: implement get_signature() method to generate the signature parameter for such functions
-        if self.version == 4:
-            function = self.position_manager.functions.permit(
-                spender, token_id, deadline, nonce, signature
-            )
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.permit(
+            spender, token_id, deadline, nonce, signature
+        )
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def permit2_single_position_manager(
@@ -987,15 +846,12 @@ class Uniswap4:
         """
         allows forwarding a single permit to permit2
         """
-        if self.version == 4:
-            function = self.position_manager.functions.permit(
-                owner, astuple(permit_single), signature
-            )
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.permit(
+            owner, astuple(permit_single), signature
+        )
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def permit2_batch_position_manager(
@@ -1008,15 +864,12 @@ class Uniswap4:
         """
         Allows forwarding batch permits to permit2
         """
-        if self.version == 4:
-            function = self.position_manager.functions.permit(
-                owner, astuple(permit_batch), signature
-            )
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.permit(
+            owner, astuple(permit_batch), signature
+        )
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def permit_for_all_position_manager(
@@ -1032,15 +885,12 @@ class Uniswap4:
         """
         Set an operator with full permission to an owner's tokens via signature
         """
-        if self.version == 4:
-            function = self.position_manager.functions.permitForAll(
-                owner, operator, approved, deadline, nonce, signature
-            )
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.permitForAll(
+            owner, operator, approved, deadline, nonce, signature
+        )
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def revoke_nonce_position_manager(
@@ -1049,13 +899,10 @@ class Uniswap4:
         """
         Revoke a nonce by spending it, preventing it from being used again
         """
-        if self.version == 4:
-            function = self.position_manager.functions.revokeNonce(nonce)
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.revokeNonce(nonce)
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def safe_transfer_from_position_manager(
@@ -1064,15 +911,12 @@ class Uniswap4:
         """
         Transfer a position from one address to another
         """
-        if self.version == 4:
-            function = self.position_manager.functions.safeTransferFrom(
-                from_addr, to_addr, token_id
-            )
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.safeTransferFrom(
+            from_addr, to_addr, token_id
+        )
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def safe_transfer_from_with_data_position_manager(
@@ -1086,15 +930,12 @@ class Uniswap4:
         """
         Transfer a position from one address to another with additional data
         """
-        if self.version == 4:
-            function = self.position_manager.functions.safeTransferFrom(
-                from_addr, to_addr, token_id, data
-            )
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.safeTransferFrom(
+            from_addr, to_addr, token_id, data
+        )
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def set_approval_for_all_position_manager(
@@ -1103,15 +944,10 @@ class Uniswap4:
         """
         Enable or disable approval for a third party ("operator") to manage all of `msg.sender`'s assets
         """
-        if self.version == 4:
-            function = self.position_manager.functions.setApprovalForAll(
-                operator, approved
-            )
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.setApprovalForAll(operator, approved)
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def subscribe_position_manager(
@@ -1120,15 +956,12 @@ class Uniswap4:
         """
         Enables the subscriber to receive notifications for a respective position
         """
-        if self.version == 4:
-            function = self.position_manager.functions.subscribe(
-                token_id, new_subscriber, data
-            )
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.subscribe(
+            token_id, new_subscriber, data
+        )
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def transfer_from_position_manager(
@@ -1137,15 +970,12 @@ class Uniswap4:
         """
         Overrides solmate transferFrom in case a notification to subscribers is needed
         """
-        if self.version == 4:
-            function = self.position_manager.functions.transferFrom(
-                from_addr, to_addr, token_id
-            )
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.transferFrom(
+            from_addr, to_addr, token_id
+        )
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def unsubscribe_position_manager(
@@ -1154,13 +984,10 @@ class Uniswap4:
         """
         Removes the subscriber from receiving notifications for a respective position
         """
-        if self.version == 4:
-            function = self.position_manager.functions.unsubscribe(token_id)
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.position_manager.functions.unsubscribe(token_id)
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     # PoolManager methods
@@ -1171,12 +998,9 @@ class Uniswap4:
         """
         Spender allowance of an id.
         """
-        if self.version == 4:
-            allowance: int = int(
-                self.pool_manager.functions.allowance(owner, spender, token_id).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        allowance: int = int(
+            self.pool_manager.functions.allowance(owner, spender, token_id).call()
+        )
         return_value = allowance
         return return_value
 
@@ -1184,12 +1008,9 @@ class Uniswap4:
         """
         The number of tokens in owner's address.
         """
-        if self.version == 4:
-            balance: int = int(
-                self.pool_manager.functions.balanceOf(address, token_id).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        balance: int = int(
+            self.pool_manager.functions.balanceOf(address, token_id).call()
+        )
         return_value = balance
         return return_value
 
@@ -1197,10 +1018,7 @@ class Uniswap4:
         """
         Called by external contracts to access granular pool state
         """
-        if self.version == 4:
-            value: bytes = self.pool_manager.functions.extsload(slot).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        value: bytes = self.pool_manager.functions.extsload(slot).call()
         return_value = value
         return return_value
 
@@ -1210,12 +1028,9 @@ class Uniswap4:
         """
         Called by external contracts to access a sequence of storage slots
         """
-        if self.version == 4:
-            value: List[bytes] = self.pool_manager.functions.extsload(
-                start_slot, slots_count
-            ).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        value: List[bytes] = self.pool_manager.functions.extsload(
+            start_slot, slots_count
+        ).call()
         return_value = value
         return return_value
 
@@ -1223,10 +1038,7 @@ class Uniswap4:
         """
         Called by external contracts to access a sparse set of storage slots
         """
-        if self.version == 4:
-            value: List[bytes] = self.pool_manager.functions.extsload(slots).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        value: List[bytes] = self.pool_manager.functions.extsload(slots).call()
         return_value = value
         return return_value
 
@@ -1234,10 +1046,7 @@ class Uniswap4:
         """
         Called by external contracts to access sparse transient pool state
         """
-        if self.version == 4:
-            value: List[bytes] = self.pool_manager.functions.exttload(slots).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        value: List[bytes] = self.pool_manager.functions.exttload(slots).call()
         return_value = value
         return return_value
 
@@ -1245,10 +1054,7 @@ class Uniswap4:
         """
         Called by external contracts to access transient storage of the contract
         """
-        if self.version == 4:
-            value: bytes = self.pool_manager.functions.exttload(slot).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        value: bytes = self.pool_manager.functions.exttload(slot).call()
         return_value = value
         return return_value
 
@@ -1256,12 +1062,9 @@ class Uniswap4:
         """
         Checks if a spender is approved by an owner as an operator
         """
-        if self.version == 4:
-            is_operator: bool = self.pool_manager.functions.isOperator(
-                owner, operator
-            ).call()
-        else:
-            raise ValueError("Function is not supported for this version")
+        is_operator: bool = self.pool_manager.functions.isOperator(
+            owner, operator
+        ).call()
         return_value = is_operator
         return return_value
 
@@ -1269,10 +1072,7 @@ class Uniswap4:
         """
         Retrieve the contract owner.
         """
-        if self.version == 4:
-            owner: str = str(self.pool_manager.functions.owner().call())
-        else:
-            raise ValueError("Function is not supported for this version")
+        owner: str = str(self.pool_manager.functions.owner().call())
         return_value = owner
         return return_value
 
@@ -1280,12 +1080,9 @@ class Uniswap4:
         """
         Returns the current protocol fee controller address
         """
-        if self.version == 4:
-            protocol_fee_controller: str = str(
-                self.pool_manager.functions.protocolFeeController().call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        protocol_fee_controller: str = str(
+            self.pool_manager.functions.protocolFeeController().call()
+        )
         return_value = protocol_fee_controller
         return return_value
 
@@ -1293,12 +1090,9 @@ class Uniswap4:
         """
         Given a currency address, returns the protocol fees accrued in that currency.
         """
-        if self.version == 4:
-            protocol_fees_accrued: int = int(
-                self.pool_manager.functions.protocolFeesAccrued(address).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        protocol_fees_accrued: int = int(
+            self.pool_manager.functions.protocolFeesAccrued(address).call()
+        )
         return_value = protocol_fees_accrued
         return return_value
 
@@ -1310,12 +1104,9 @@ class Uniswap4:
         """
         if len(interface_id) != 4:
             raise ValueError("interface_id should be 4 bytes long")
-        if self.version == 4:
-            supports_interface: bool = bool(
-                self.pool_manager.functions.supportsInterface(interface_id).call()
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        supports_interface: bool = bool(
+            self.pool_manager.functions.supportsInterface(interface_id).call()
+        )
         return_value = supports_interface
         return return_value
 
@@ -1326,22 +1117,16 @@ class Uniswap4:
         """
         Approves an amount of an id to a spender.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.approve(spender, token_id, amount)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.approve(spender, token_id, amount)
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def burn_pool_manager(self, from_addr: str, token_id: int, amount: int) -> HexBytes:
         """
         Called by the user to move value from ERC6909 balance.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.burn(from_addr, token_id, amount)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.burn(from_addr, token_id, amount)
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def clear_pool_manager(self, currency: str, amount: int) -> HexBytes:
@@ -1352,11 +1137,8 @@ class Uniswap4:
         Additionally, the amount must be the exact positive balance.
         This is to enforce that the caller is aware of the amount being cleared.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.clear(currency, amount)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.clear(currency, amount)
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def collect_protocol_fees_pool_manager(
@@ -1366,13 +1148,10 @@ class Uniswap4:
         Collects the protocol fees for a given recipient and currency, returning the amount collected
         This will revert if the contract is unlocked
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.collectProtocolFees(
-                recipient, currency, amount
-            )
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.collectProtocolFees(
+            recipient, currency, amount
+        )
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def donate_pool_manager(
@@ -1381,13 +1160,10 @@ class Uniswap4:
         """
         Donate the given currency amounts to the in-range liquidity providers of a pool
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.donate(
-                astuple(pool_key), amount0, amount1, hook_data
-            )
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.donate(
+            astuple(pool_key), amount0, amount1, hook_data
+        )
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def initialize_pool_manager(
@@ -1396,24 +1172,18 @@ class Uniswap4:
         """
         Initialize the state for a given pool ID.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.initialize(
-                astuple(pool_key), sqrt_price_x96
-            )
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.initialize(
+            astuple(pool_key), sqrt_price_x96
+        )
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def mint_pool_manager(self, to_addr: str, token_id: int, amount: int) -> HexBytes:
         """
         Called by the user to move value into ERC6909 balance.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.mint(to_addr, token_id, amount)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.mint(to_addr, token_id, amount)
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def modify_liquidity_pool_manager(
@@ -1425,24 +1195,18 @@ class Uniswap4:
         """
         Modify the liquidity for the given pool.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.modifyLiquidity(
-                astuple(pool_key), astuple(liquidity_params), hook_data
-            )
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.modifyLiquidity(
+            astuple(pool_key), astuple(liquidity_params), hook_data
+        )
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def set_operator_pool_manager(self, operator: str, approved: bool) -> HexBytes:
         """
         Sets or removes an operator for the caller.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.setOperator(operator, approved)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.setOperator(operator, approved)
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def set_protocol_fee_pool_manager(
@@ -1451,50 +1215,38 @@ class Uniswap4:
         """
         Sets the protocol fee for the given pool.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.setProtocolFee(
-                astuple(pool_key), new_protocol_fee
-            )
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.setProtocolFee(
+            astuple(pool_key), new_protocol_fee
+        )
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def set_protocol_fee_controller_pool_manager(self, controller: str) -> HexBytes:
         """
         Sets a new protocol fee controller.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.setProtocolFeeController(controller)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.setProtocolFeeController(controller)
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def settle_pool_manager(self, payable_amount: int) -> HexBytes:
         """
         Called by the user to pay what is owed.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.settle()
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.settle()
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def settle_for_pool_manager(self, recipient: str, payable_amount: int) -> HexBytes:
         """
         Called by the user to pay on behalf of another address.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.settleFor(recipient)
-            tx = self._build_and_send_tx(
-                function, self._get_tx_params(value=payable_amount)
-            )
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.settleFor(recipient)
+        tx = self._build_and_send_tx(
+            function, self._get_tx_params(value=payable_amount)
+        )
         return tx
 
     def swap_pool_manager(
@@ -1503,13 +1255,10 @@ class Uniswap4:
         """
         Swap against the given pool.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.swap(
-                astuple(pool_key), astuple(params), hook_data
-            )
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.swap(
+            astuple(pool_key), astuple(params), hook_data
+        )
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def sync_pool_manager(self, currency: str) -> HexBytes:
@@ -1518,22 +1267,16 @@ class Uniswap4:
         This is used to checkpoint balances for the manager and derive deltas for the caller.
         This MUST be called before any ERC20 tokens are sent into the contract, see documentation for more details.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.sync(currency)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.sync(currency)
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def take_pool_manager(self, currency: str, to_addr: str, amount: int) -> HexBytes:
         """
         Called by the user to net out some value owed to the user.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.take(currency, to_addr, amount)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.take(currency, to_addr, amount)
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def transfer_pool_manager(
@@ -1542,11 +1285,8 @@ class Uniswap4:
         """
         Transfers an amount of an id from the caller to a receiver.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.transfer(to_addr, token_id, amount)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.transfer(to_addr, token_id, amount)
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def transfer_from_pool_manager(
@@ -1555,24 +1295,18 @@ class Uniswap4:
         """
         Transfers an amount of an id from a sender to a receiver..
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.transferFrom(
-                sender, receiver, token_id, amount
-            )
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.transferFrom(
+            sender, receiver, token_id, amount
+        )
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def transfer_ownership_pool_manager(self, new_owner: str) -> HexBytes:
         """
         Transfers ownership of the contract to a new owner.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.transferOwnership(new_owner)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.transferOwnership(new_owner)
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def unlock_pool_manager(self, data: bytes) -> HexBytes:
@@ -1581,11 +1315,8 @@ class Uniswap4:
         A caller that calls `unlock` must implement `IUnlockCallback(msg.sender).unlockCallback(data)`,
         where they interact with the remaining functions on this contract.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.unlock(data)
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.unlock(data)
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     def update_dynamic_lp_fee_pool_manager(
@@ -1594,13 +1325,10 @@ class Uniswap4:
         """
         Updates the pools lp fees for the a pool that has enabled dynamic lp fees.
         """
-        if self.version == 4:
-            function = self.pool_manager.functions.updateDynamicLPFee(
-                astuple(pool_key), new_dynamic_lp_fee
-            )
-            tx = self._build_and_send_tx(function, self._get_tx_params())
-        else:
-            raise ValueError("Function is not supported for this version")
+        function = self.pool_manager.functions.updateDynamicLPFee(
+            astuple(pool_key), new_dynamic_lp_fee
+        )
+        tx = self._build_and_send_tx(function, self._get_tx_params())
         return tx
 
     # Tokens price functions
@@ -1623,20 +1351,17 @@ class Uniswap4:
             den1 = self.get_token(_str_to_addr(token0)).decimals
             zero_for_one = False
 
-        if token0 > token1:
+        if token0.lower() > token1.lower():
             (token1, token0) = (token0, token1)
 
         # pool = pool_key(token0, token1, fee, tick_spacing, hooks)
         # pool_id = self.get_pool_id(pool)
 
-        if self.version == 4:
-            # spot_price_x96 : int =
-            # self.stateview.functions.getSlot0(pool_id).call()[0]
-            spot_price_x96: int = self.get_slot0_stateview(
-                token0, token1, fee, tick_spacing, hooks
-            )["sqrtPriceX96"]
-        else:
-            raise ValueError("Function is not supported for this version")
+        # spot_price_x96 : int =
+        # self.stateview.functions.getSlot0(pool_id).call()[0]
+        spot_price_x96: int = self.get_slot0_stateview(
+            token0, token1, fee, tick_spacing, hooks
+        )["sqrtPriceX96"]
 
         spot_price: float = (spot_price_x96 * spot_price_x96 * 10**den0 >> (96 * 2)) / (
             10**den1
@@ -1656,19 +1381,16 @@ class Uniswap4:
         hook_data: bytes = bytes(),
     ) -> int:
         """Quote for token to token single hop trades with an exact input."""
-        if self.version == 4:
-            if token0 < token1:
-                zero_for_one = True
-            else:
-                zero_for_one = False
-                (token0, token1) = (token1, token0)
-            pool_key = (token0, token1, fee, tick_spacing, hooks)
-            # [0]=The output quote [1]=estimated gas units used for the swap
-            quote_amount: int = self.quoter.functions.quoteExactInputSingle(
-                (pool_key, zero_for_one, qty, hook_data)
-            ).call()[0]
+        if token0 < token1:
+            zero_for_one = True
         else:
-            raise ValueError("Function is not supported for this version")
+            zero_for_one = False
+            (token0, token1) = (token1, token0)
+        pool_key = (token0, token1, fee, tick_spacing, hooks)
+        # [0]=The output quote [1]=estimated gas units used for the swap
+        quote_amount: int = self.quoter.functions.quoteExactInputSingle(
+            (pool_key, zero_for_one, qty, hook_data)
+        ).call()[0]
         return quote_amount
 
     def get_pool_id(self, pool: PoolKey) -> HexBytes:
@@ -1706,10 +1428,7 @@ class Uniswap4:
             _name = token_contract.functions.name().call()
             _symbol = token_contract.functions.symbol().call()
             decimals = token_contract.functions.decimals().call()
-        except Exception as e:
-            logger.warning(
-                f"Exception occurred while trying to get token {_addr_to_str(address)}: {e}"
-            )
+        except Exception:
             raise InvalidToken(address)
         try:
             name = _name.decode()
@@ -1717,7 +1436,8 @@ class Uniswap4:
             name = _name
         try:
             symbol = _symbol.decode()
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error occurred while decoding symbol for {address}: {e}")
             symbol = _symbol
         return ERC20Token(symbol, address, name, decimals)
 
@@ -1785,26 +1505,23 @@ class Uniswap4:
         hook_data: bytes = bytes(),
     ) -> int:
         """Quote for token to token single hop trades with an exact output."""
-        if self.version == 4:
-            if token0 < token1:
-                zero_for_one = True
-            else:
-                zero_for_one = False
-                (token1, token0) = (token0, token1)
-
-            pool_key = (
-                token0,
-                token1,
-                fee,
-                tick_spacing,
-                hooks,
-            )
-            # [0]=The input quote [1]=estimated gas units used for the swap
-            quote_amount: int = self.quoter.functions.quoteExactOutputSingle(
-                (pool_key, zero_for_one, qty, hook_data)
-            ).call()[0]
+        if token0 < token1:
+            zero_for_one = True
         else:
-            raise ValueError("Function is not supported for this version")
+            zero_for_one = False
+            (token1, token0) = (token0, token1)
+
+        pool_key = (
+            token0,
+            token1,
+            fee,
+            tick_spacing,
+            hooks,
+        )
+        # [0]=The input quote [1]=estimated gas units used for the swap
+        quote_amount: int = self.quoter.functions.quoteExactOutputSingle(
+            (pool_key, zero_for_one, qty, hook_data)
+        ).call()[0]
         return quote_amount
 
     # Swap functions
@@ -1819,73 +1536,70 @@ class Uniswap4:
         hooks: str,
         recipient: Optional[str] = None,
     ) -> HexBytes:
-        if self.version == 4:
-            if recipient is None:
-                recipient = str(self.address)
+        if recipient is None:
+            recipient = str(self.address)
 
-            min_tokens_bought = int((1 - self.max_slippage) * qtycap)
+        min_tokens_bought = int((1 - self.max_slippage) * qtycap)
 
-            ether_amount = 0
-            if input_token == ETH_ADDRESS:
-                ether_amount = qty
+        ether_amount = 0
+        if input_token == ETH_ADDRESS:
+            ether_amount = qty
 
-            # V4_SWAP // Encode swap actions
-            commands = encode_packed(
-                ["uint8"],
-                args=[0x10],
-            )
+        # V4_SWAP // Encode swap actions
+        commands = encode_packed(
+            ["uint8"],
+            args=[0x10],
+        )
 
-            # SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL
-            actions = encode_packed(
-                ["uint8", "uint8", "uint8"],
-                [0x06, 0x0C, 0x0F],
-            )
+        # SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL
+        actions = encode_packed(
+            ["uint8", "uint8", "uint8"],
+            [0x06, 0x0C, 0x0F],
+        )
 
-            # SETTING PARAMS
-            # pool_key = (input_token, output_token, fee, tick_spacing, hooks)
-            if input_token < output_token:
-                zero_for_one = True
-                (token0, token1) = (input_token, output_token)
-            else:
-                zero_for_one = False
-                (token0, token1) = (output_token, input_token)
-            exact_input_single_params = encode(
-                ["((address,address,uint24,int24,address),bool,int128,uint128,bytes)"],
-                [
-                    (
-                        (token0, token1, fee, tick_spacing, hooks),
-                        zero_for_one,
-                        qty,
-                        min_tokens_bought,
-                        bytes(0),
-                    )
-                ],
-            )
-            settle_all_params = encode(
-                ["address", "uint128"],
-                [input_token, qty],
-            )
-            take_all_params = encode(
-                ["address", "uint128"],
-                [output_token, min_tokens_bought],
-            )
-
-            # ENCODING DATA
-            params = [exact_input_single_params, settle_all_params, take_all_params]
-            inputs = []
-            inputs.append(
-                encode(
-                    ["bytes", "bytes[]"],
-                    [actions, params],
-                )
-            )
-
-            return self._build_and_send_tx(
-                self.router.functions.execute(commands, inputs, self._deadline()),
-                self._get_tx_params(value=ether_amount),
-            )
+        # SETTING PARAMS
+        # pool_key = (input_token, output_token, fee, tick_spacing, hooks)
+        if input_token < output_token:
+            zero_for_one = True
+            (token0, token1) = (input_token, output_token)
         else:
-            raise ValueError("Function is not supported for this version")
+            zero_for_one = False
+            (token0, token1) = (output_token, input_token)
+        exact_input_single_params = encode(
+            ["((address,address,uint24,int24,address),bool,int128,uint128,bytes)"],
+            [
+                (
+                    (token0, token1, fee, tick_spacing, hooks),
+                    zero_for_one,
+                    qty,
+                    min_tokens_bought,
+                    bytes(0),
+                )
+            ],
+        )
+        settle_all_params = encode(
+            ["address", "uint128"],
+            [input_token, qty],
+        )
+        take_all_params = encode(
+            ["address", "uint128"],
+            [output_token, min_tokens_bought],
+        )
+
+        # ENCODING DATA
+        params = [exact_input_single_params, settle_all_params, take_all_params]
+        inputs = []
+        inputs.append(
+            encode(
+                ["bytes", "bytes[]"],
+                [actions, params],
+            )
+        )
+
+        return self._build_and_send_tx(
+            self.router.functions.execute(commands, inputs, self._deadline()),
+            self._get_tx_params(value=ether_amount),
+        )
 
     def _token_to_token_swap_output(
         self,
@@ -1898,78 +1612,75 @@ class Uniswap4:
         hooks: str,
         recipient: Optional[str] = None,
     ) -> HexBytes:
-        if self.version == 4:
-            if recipient is None:
-                recipient = str(self.address)
+        if recipient is None:
+            recipient = str(self.address)
 
-            amount_in_max = int((1 + self.max_slippage) * qtycap)
+        amount_in_max = int((1 + self.max_slippage) * qtycap)
 
-            ether_amount = 0
-            if input_token == ETH_ADDRESS:
-                ether_amount = qty
+        ether_amount = 0
+        if input_token == ETH_ADDRESS:
+            ether_amount = amount_in_max
 
-            # V4_SWAP // Encode swap actions
-            commands = encode_packed(
-                ["uint8"],
-                args=[0x10],
-            )
+        # V4_SWAP // Encode swap actions
+        commands = encode_packed(
+            ["uint8"],
+            args=[0x10],
+        )
 
-            # SWAP_EXACT_OUT_SINGLE, SETTLE_ALL, TAKE_ALL
-            actions = encode_packed(
-                ["uint8", "uint8", "uint8"],
-                args=[0x09, 0x0C, 0x0F],
-            )
-            # SETTING PARAMS
-            # pool_key = (input_token, output_token, fee, tick_spacing, hooks,)
-            if input_token < output_token:
-                zero_for_one = True
-                (token0, token1) = (input_token, output_token)
-            else:
-                zero_for_one = False
-                (token0, token1) = (output_token, input_token)
-            exact_output_single_params = encode(
-                ["((address,address,uint24,int24,address),bool,int128,uint128,bytes)"],
-                [
-                    (
-                        (
-                            token0,
-                            token1,
-                            fee,
-                            tick_spacing,
-                            hooks,
-                        ),
-                        zero_for_one,
-                        qty,
-                        amount_in_max,
-                        bytes(0),
-                    )
-                ],
-            )
-            settle_all_params = encode(
-                ["address", "uint128"],
-                [input_token, amount_in_max],
-            )
-            take_all_params = encode(
-                ["address", "uint128"],
-                [output_token, qty],
-            )
-
-            # ENCODING DATA
-            params = [exact_output_single_params, settle_all_params, take_all_params]
-            inputs = []
-            inputs.append(
-                encode(
-                    ["bytes", "bytes[]"],
-                    [actions, params],
-                )
-            )
-
-            return self._build_and_send_tx(
-                self.router.functions.execute(commands, inputs, self._deadline()),
-                self._get_tx_params(value=ether_amount),
-            )
+        # SWAP_EXACT_OUT_SINGLE, SETTLE_ALL, TAKE_ALL
+        actions = encode_packed(
+            ["uint8", "uint8", "uint8"],
+            args=[0x09, 0x0C, 0x0F],
+        )
+        # SETTING PARAMS
+        # pool_key = (input_token, output_token, fee, tick_spacing, hooks,)
+        if input_token < output_token:
+            zero_for_one = True
+            (token0, token1) = (input_token, output_token)
         else:
-            raise ValueError("Function is not supported for this version")
+            zero_for_one = False
+            (token0, token1) = (output_token, input_token)
+        exact_output_single_params = encode(
+            ["((address,address,uint24,int24,address),bool,int128,uint128,bytes)"],
+            [
+                (
+                    (
+                        token0,
+                        token1,
+                        fee,
+                        tick_spacing,
+                        hooks,
+                    ),
+                    zero_for_one,
+                    qty,
+                    amount_in_max,
+                    bytes(0),
+                )
+            ],
+        )
+        settle_all_params = encode(
+            ["address", "uint128"],
+            [input_token, amount_in_max],
+        )
+        take_all_params = encode(
+            ["address", "uint128"],
+            [output_token, qty],
+        )
+
+        # ENCODING DATA
+        params = [exact_output_single_params, settle_all_params, take_all_params]
+        inputs = []
+        inputs.append(
+            encode(
+                ["bytes", "bytes[]"],
+                [actions, params],
+            )
+        )
+
+        return self._build_and_send_tx(
+            self.router.functions.execute(commands, inputs, self._deadline()),
+            self._get_tx_params(value=ether_amount),
+        )
 
     def drop_txn(
         self,
