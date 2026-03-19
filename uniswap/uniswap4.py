@@ -1484,7 +1484,8 @@ class Uniswap4:
             # `(token0, token1, fee)` hasn't been deployed.
             return 1
         price = (
-            quote_amount / (qty / (10 ** self.get_token(token0).decimals))
+        price = (
+            quote_amount / (qty / (10 ** self.get_token(_str_to_addr(token0)).decimals))
         ) / 10 ** self.get_token(_str_to_addr(token1)).decimals
 
         # calculate and subtract the realised fees from the price impact.  See:
