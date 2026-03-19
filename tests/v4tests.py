@@ -224,7 +224,7 @@ def state_view_tests():
         default_test_hooks,
     )
     test_tick: int = int(test_result1["tick"])
-    print(f"Result: {Fore.GREEN}" + str(test_result) + f"{Style.RESET_ALL}")
+    print(f"Result: {Fore.GREEN}" + str(test_result1) + f"{Style.RESET_ALL}")
     #
     print(
         f"Testing get_fee_growth_globals() for ({Fore.GREEN}ETH{Style.RESET_ALL}, {Fore.GREEN}USDC{Style.RESET_ALL}) liquidity pool"
