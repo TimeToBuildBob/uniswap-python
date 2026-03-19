@@ -1,3 +1,5 @@
+import os
+
 from colorama import Fore, Style
 from web3 import Web3
 
@@ -17,15 +19,8 @@ def pool_tests():
     print("Testing save_poolkeys_list() absolute path")
     try:
         v4pools_test.save_poolkeys_list(
-            "/home/yohan/src/Uniswap/uniswap-python/tests/pools/pool_list_mainnet.tst1"
+            os.path.join(_TESTS_DIR, "pools", "pool_list_mainnet.tst1")
         )
-        print("Test passed.")
-    except Exception:
-        print("Test failed.")
-
-    print("Testing save_poolkeys_list() relative path")
-    try:
-        v4pools_test.save_poolkeys_list("./pools/pool_list_mainnet.tst2")
         print("Test passed.")
     except Exception:
         print("Test failed.")
@@ -33,14 +28,8 @@ def pool_tests():
     print("Testing load_poolkeys_list() absolute path")
     try:
         v4pools_test.load_poolkeys_list(
-            "/home/yohan/src/Uniswap/uniswap-python/tests/pools/pool_list_mainnet.tst1"
+            os.path.join(_TESTS_DIR, "pools", "pool_list_mainnet.tst1")
         )
-        print("Test passed.")
-    except Exception:
-        print("Test failed.")
-    print("Testing load_poolkeys_list() relative path")
-    try:
-        v4pools_test.load_poolkeys_list("./pools/pool_list_mainnet.tst2")
         print("Test passed.")
     except Exception:
         print("Test failed.")
@@ -332,6 +321,7 @@ if __name__ == "__main__":
     default_test_fee = 500
     default_test_tick_spacing = 10
     default_test_hooks = test_zero_hook
+    _TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 
     rpc_endpoint = "https://eth.drpc.org"  # "https://go.getblock.us/27eb23f40b964c9bb71b62f721e594e7"
     address = "0x94e3361495bD110114ac0b6e35Ed75E77E6a6cFA"
