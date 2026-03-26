@@ -8,7 +8,7 @@ on:
 
 env:
   PROVIDER_MAINNET: ${{ secrets.MAINNET_PROVIDER || 'https://ethereum.publicnode.com' }}
-  PROVIDER_ARBITRUM: 'https://rpc.ankr.com/arbitrum'
+  PROVIDER_ARBITRUM: 'https://arb1.arbitrum.io/rpc'
   PROVIDER_XDAI: 'https://rpc.ankr.com/gnosis'
 
 jobs:

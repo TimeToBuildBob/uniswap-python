@@ -1437,7 +1437,11 @@ class Uniswap4:
         try:
             symbol = _symbol.decode()
         except Exception as e:
-            logger.warning(f"Error occurred while decoding symbol for {address}: {e}")
+            logger.warning(
+                "Error occurred while decoding symbol for %s: %s",
+                _addr_to_str(address),
+                e,
+            )
             symbol = str(_symbol)
         return ERC20Token(symbol, address, name, decimals)
 
