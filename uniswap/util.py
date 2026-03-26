@@ -261,7 +261,7 @@ class V4pools:
                 #     "fromBlock": str(start_block),
                 #     "toBlock": str(end_block),
                 # }
-                logs = pool_manager_contract.events.Initialize().get_logs(
+                logs = pool_manager_contract.events.Initialize().get_logs(  # type: ignore[attr-defined]
                     fromBlock=start_block, toBlock=end_block
                 )
             except Exception as e:
