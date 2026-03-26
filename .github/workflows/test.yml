@@ -2,13 +2,12 @@ name: Test
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, dev/v4, dev/v4-fin ]
   pull_request:
-    branches: [ master ]
+    branches: [ master, dev/v4, dev/v4-fin ]
 
 env:
-  # Public key for PRs, plz don't abuse
-  PROVIDER_MAINNET: ${{ secrets.MAINNET_PROVIDER || 'https://mainnet.infura.io/v3/42ffb4f2549c4a5fa3b5d6db70f6fad1' }}
+  PROVIDER_MAINNET: ${{ secrets.MAINNET_PROVIDER || 'https://ethereum.publicnode.com' }}
   PROVIDER_ARBITRUM: 'https://rpc.ankr.com/arbitrum'
   PROVIDER_XDAI: 'https://rpc.ankr.com/gnosis'
 
