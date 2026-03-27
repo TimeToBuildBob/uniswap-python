@@ -76,7 +76,7 @@ jobs:
 
     - name: Test
       env:
-        # Use the secret if available, otherwise fallback to the public key
+        # Select the provider URL for this matrix run (all env vars are hardcoded public endpoints)
         PROVIDER: ${{ ((matrix.network == 'mainnet') && env.PROVIDER_MAINNET) || ((matrix.network == 'arbitrum') && env.PROVIDER_ARBITRUM) }}
         UNISWAP_VERSION: ${{ matrix.uniswap-version }}
       run: |
