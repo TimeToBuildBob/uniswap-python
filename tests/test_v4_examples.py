@@ -316,6 +316,8 @@ class TestExamplePoolDiscovery:
         first_block = 21688329  # Uniswap v4 deployment block
         pool_service.fetch_poolkey_data(
             first_block=first_block,
+            last_block=first_block
+            + 1000,  # bound the scan to avoid thousands of RPC calls
             chunk_size=500,
             clear_list=False,
         )

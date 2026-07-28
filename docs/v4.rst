@@ -346,11 +346,16 @@ Reading position state
 
 .. code:: python
 
+    from uniswap.types import PoolKey
+
     position = uni.get_position_info(token_id)
-    print(f"Liquidity: {position['liquidity']}")
+    liquidity = uni.position_manager_get_position_liquidity(token_id)
+    print(f"Liquidity: {liquidity}")
 
     # Read the position value (amounts of token0/token1 at current price)
-    value = uni.get_position_value(token_id)
+    ETH_DECIMALS = 18
+    USDC_DECIMALS = 6
+    value = uni.get_position_value(token_id, ETH_DECIMALS, USDC_DECIMALS)
     print(f"token0 amount: {value['amount0']}, token1 amount: {value['amount1']}")
 
 Collecting fees and removing liquidity
@@ -358,15 +363,30 @@ Collecting fees and removing liquidity
 
 .. code:: python
 
+    from uniswap.types import PoolKey
+
+    # Build the PoolKey from position info
+    position = uni.get_position_info(token_id)
+    pool_key = PoolKey(
+        position["currency0"], position["currency1"],
+        position["fee"], position["tickSpacing"], position["hooks"]
+    )
+
     # Collect all accumulated fees
-    uni.collect_fees(token_id=token_id)
+    uni.collect_fees(pool_key=pool_key, token_id=token_id)
 
     # Remove half the liquidity
-    liquidity = uni.get_position_info(token_id)["liquidity"]
-    uni.decrease_liquidity(token_id=token_id, liquidity=liquidity // 2)
+    liquidity = uni.position_manager_get_position_liquidity(token_id)
+    uni.decrease_liquidity(
+        pool_key=pool_key,
+        token_id=token_id,
+        liquidity=liquidity // 2,
+        amount0_min=0,
+        amount1_min=0,
+    )
 
     # Burn the position NFT once fully emptied
-    uni.burn_position(token_id=token_id)
+    uni.burn_position(pool_key=pool_key, token_id=token_id, amount0_min=0, amount1_min=0)
 
 Reading pool state via StateView
 ---------------------------------
@@ -381,10 +401,10 @@ swap.
     USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
 
     # Current pool price and tick
-    slot0 = uni.stateview_get_slot0(ETH_ADDRESS, USDC, fee=500, tick_spacing=10)
+    slot0 = uni.stateview_get_slot0(ETH_ADDRESS, USDC, fee=500, tick_spacing=10, hooks=ZERO_HOOK)
     print(f"sqrtPriceX96: {slot0['sqrtPriceX96']}")
     print(f"current tick: {slot0['tick']}")
 
     # Total in-range liquidity
-    liquidity = uni.stateview_get_liquidity(ETH_ADDRESS, USDC, fee=500, tick_spacing=10)
+    liquidity = uni.stateview_get_liquidity(ETH_ADDRESS, USDC, fee=500, tick_spacing=10, hooks=ZERO_HOOK)
     print(f"in-range liquidity: {liquidity}")

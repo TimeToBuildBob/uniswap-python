@@ -72,8 +72,7 @@ For pairs without a direct v2 pool, route through an intermediate token:
 
     WBTC = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
 
-    # ETH → USDC → WBTC (v2 multi-hop)
-    # Provide the full path as an address list
+    # ETH → WBTC (routed automatically through WETH by the v2 router)
     wbtc_out = uni.get_price_input(ETH, WBTC, ONE_ETH // 10)
     tx = uni.make_trade(ETH, WBTC, ONE_ETH // 10)
 
@@ -143,19 +142,19 @@ Making swaps
 Multi-hop swaps
 ```````````````
 
-For pairs without a direct pool, route through an intermediate token using
-the ``route`` parameter:
+The v3 client does not expose a multi-hop path parameter in ``make_trade``.
+For pairs without a direct pool, execute two single-hop trades in sequence:
 
 .. code:: python
 
-    # ETH → USDC → DAI (two 0.05% hops)
-    tx = uni.make_trade(
-        ETH,
-        DAI,
-        ONE_ETH // 10,
-        route=[ETH, USDC, DAI],
-        fee=500,
-    )
+    DAI = "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+
+    # ETH → USDC (first hop, 0.05% pool)
+    tx1 = uni.make_trade(ETH, USDC, ONE_ETH // 10, fee=500)
+
+    # USDC → DAI (second hop, 0.01% stable pool)
+    usdc_received = uni.get_price_input(ETH, USDC, ONE_ETH // 10, fee=500)
+    tx2 = uni.make_trade(USDC, DAI, usdc_received, fee=100)
 
 Liquidity management (v3)
 `````````````````````````
