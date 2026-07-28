@@ -52,7 +52,8 @@ Tests run on a fork of mainnet using [Anvil](https://getfoundry.sh) (part of Fou
 
 ```sh
 curl -L https://foundry.paradigm.xyz | bash
-"$HOME/.foundry/bin/foundryup"
+export PATH="$PATH:$HOME/.foundry/bin"
+foundryup
 ```
 
 To run the full test suite, in the project directory set the `PROVIDER` env variable to a mainnet provider, and run:
