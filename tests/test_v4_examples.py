@@ -275,6 +275,7 @@ class TestExampleStateView:
             USDC_ADDRESS,
             fee=ETH_USDC_FEE,
             tick_spacing=ETH_USDC_TICK_SPACING,
+            hooks=ZERO_HOOK,
         )
         assert slot0["sqrtPriceX96"] > 0
         # Tick is a signed integer; ETH/USDC tick should be negative
@@ -292,6 +293,7 @@ class TestExampleStateView:
             USDC_ADDRESS,
             fee=ETH_USDC_FEE,
             tick_spacing=ETH_USDC_TICK_SPACING,
+            hooks=ZERO_HOOK,
         )
         assert liquidity > 0, "ETH/USDC 0.05% pool should have liquidity"
 
