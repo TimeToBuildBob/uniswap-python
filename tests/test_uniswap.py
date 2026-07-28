@@ -442,19 +442,8 @@ class TestUniswap(object):
             ("ETH", "DAI", ONE_ETH, None, does_not_raise),
             # Token -> Token
             ("DAI", "USDC", ONE_ETH, None, does_not_raise),
-            # Token -> ETH — xfail: Anvil's revm JUMPDEST validation rejects old
-            # Vyper v1 tokenToEth code path (EvmError: InvalidJump); Ganache was
-            # more permissive.
-            pytest.param(
-                "USDC",
-                "ETH",
-                ONE_USDC,
-                None,
-                does_not_raise,
-                marks=pytest.mark.xfail(
-                    reason="Anvil revm rejects Vyper v1 token-to-ETH jump table (InvalidJump)"
-                ),
-            ),
+            # Token -> ETH
+            ("USDC", "ETH", ONE_USDC, None, does_not_raise),
             # ("ETH", "UNI", 0.00001 * ONE_ETH, ZERO_ADDRESS, does_not_raise),
             # ("UNI", "ETH", 0.00001 * ONE_ETH, ZERO_ADDRESS, does_not_raise),
             # ("DAI", "UNI", 0.00001 * ONE_ETH, ZERO_ADDRESS, does_not_raise),
@@ -498,17 +487,8 @@ class TestUniswap(object):
             ("ETH", "DAI", ONE_ETH, None, does_not_raise),
             # Token -> Token
             ("DAI", "USDC", ONE_USDC, None, does_not_raise),
-            # Token -> ETH — xfail: same Anvil/Vyper v1 InvalidJump issue as above.
-            pytest.param(
-                "DAI",
-                "ETH",
-                ONE_ETH // 10,
-                None,
-                does_not_raise,
-                marks=pytest.mark.xfail(
-                    reason="Anvil revm rejects Vyper v1 token-to-ETH jump table (InvalidJump)"
-                ),
-            ),
+            # Token -> ETH
+            ("DAI", "ETH", ONE_ETH // 10, None, does_not_raise),
             # FIXME: These should probably be uncommented eventually
             # ("ETH", "UNI", int(0.000001 * ONE_ETH), ZERO_ADDRESS),
             # ("UNI", "ETH", int(0.000001 * ONE_ETH), ZERO_ADDRESS),

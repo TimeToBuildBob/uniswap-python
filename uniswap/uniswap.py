@@ -1438,10 +1438,10 @@ class Uniswap:
         # eth_estimateGas internally. web3 calls eth_estimateGas during
         # build_transaction when no gas is provided, which fails for contracts
         # with computed jumps (e.g. Vyper v1 exchange contracts) under Anvil's
-        # strict EVM. use_estimate_gas=True for networks like Arbitrum where 250k
+        # strict EVM. use_estimate_gas=True for networks like Arbitrum where 500k
         # is not a safe default.
         if "gas" not in tx_params and not self.use_estimate_gas:
-            tx_params["gas"] = Wei(250_000)
+            tx_params["gas"] = Wei(500_000)
 
         transaction = function.build_transaction(tx_params)
 
