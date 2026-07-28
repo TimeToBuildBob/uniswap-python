@@ -20,8 +20,6 @@ The unofficial Python client for [Uniswap](https://uniswap.io/).
 
 Documentation is available at https://uniswap-python.com/
 
-**Want to help implement support for Uniswap v4?** See [issue #337](https://github.com/uniswap-python/uniswap-python/issues/337)
-
 ## Functionality
 
 *  A simple to use Python wrapper for all available contract functions and variables
@@ -30,6 +28,9 @@ Documentation is available at https://uniswap-python.com/
 
 ### Supports
 
+ - Uniswap v4 (as of v0.8.0, beta)
+    - Swaps, price quoting, liquidity management
+    - Pool discovery via pool cache service
  - Uniswap v3 (as of v0.5.0)
     - Including beta support for Arbitrum & Optimism deployments (as of v0.5.4)
  - Uniswap v2 (as of v0.4.0)
