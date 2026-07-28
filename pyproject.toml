@@ -25,6 +25,10 @@ unipy = "uniswap:main"
 [tool.poetry.dependencies]
 python = "^3.12"
 web3 = "^6.5.0"
+cytoolz = ">=0.12.3"
+frozenlist = ">=1.5.0"
+multidict = ">=6.0.5"
+yarl = ">=1.10.0"
 click = "^8"
 python-dotenv = "*"
 
