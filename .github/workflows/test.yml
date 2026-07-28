@@ -40,7 +40,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.8'
+        python-version: '3.12'
     # Set up poetry cache, from https://github.com/python-poetry/poetry/blob/45a9b8f20384591d0a33ae876bcf23656f928ec0/.github/workflows/main.yml
     - name: Get full python version
       id: full-python-version
@@ -94,7 +94,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.8'
+        python-version: '3.12'
 
     # Set up poetry cache, from https://github.com/python-poetry/poetry/blob/45a9b8f20384591d0a33ae876bcf23656f928ec0/.github/workflows/main.yml
     - name: Get full python version
