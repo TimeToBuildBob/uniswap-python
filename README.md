@@ -51,7 +51,9 @@ Unit tests are under development using the pytest framework. Contributions are w
 Tests run on a fork of mainnet using [Anvil](https://getfoundry.sh) (part of Foundry). Install Foundry with:
 
 ```sh
-curl -L https://foundry.paradigm.xyz | bash && foundryup
+curl -L https://foundry.paradigm.xyz | bash
+source "$HOME/.foundry/bin/env"
+foundryup
 ```
 
 To run the full test suite, in the project directory set the `PROVIDER` env variable to a mainnet provider, and run:
