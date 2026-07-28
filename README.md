@@ -48,7 +48,11 @@ See our [Getting started guide](https://uniswap-python.com/getting-started.html)
 
 Unit tests are under development using the pytest framework. Contributions are welcome!
 
-Test are run on a fork of the main net using ganache-cli. You need to install it with `npm install -g ganache-cli` before running tests.
+Tests run on a fork of mainnet using [Anvil](https://getfoundry.sh) (part of Foundry). Install Foundry with:
+
+```sh
+curl -L https://foundry.paradigm.xyz | bash && foundryup
+```
 
 To run the full test suite, in the project directory set the `PROVIDER` env variable to a mainnet provider, and run:
 
@@ -162,7 +166,7 @@ _A huge thank you [Erik Bjäreholt](https://github.com/ErikBjare) for adding Uni
 * Switched from setup.py to pyproject.toml/poetry
 * Switched from Travis to GitHub Actions
 * For CI to work in your repo, you need to set the secret MAINNET_PROVIDER. I use Infura.
-* Running tests on a local fork of mainnet using ganache-cli (started as a fixture)
+* Running tests on a local fork of mainnet using Anvil/Foundry (started as a fixture)
 * Fixed tests for make_trade and make_trade_output
 * Added type annotations to the entire codebase and check them with mypy in CI
 * Formatted entire codebase with black
