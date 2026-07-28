@@ -24,7 +24,7 @@ unipy = "uniswap:main"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-web3 = "^6.5.0"
+web3 = ">=6.20.0,<7"
 cytoolz = ">=0.12.3"
 frozenlist = ">=1.5.0"
 multidict = ">=6.0.5"
@@ -32,6 +32,11 @@ yarl = ">=1.10.0"
 click = "^8"
 python-dotenv = "*"
 aiohttp = ">=3.9.0"
+typing-extensions = ">=4.12.0"
+# eth-keyfile (via web3->eth-account) imports pkg_resources, which setuptools
+# dropped in 82.0.0 (last shipped in 81.0.0). Pin below that until web3 7.x
+# (which pulls in a pkg_resources-free eth-keyfile) is adopted.
+setuptools = "<82"
 
 [tool.poetry.dev-dependencies]
 mypy = "*"
@@ -40,7 +45,7 @@ pytest = "^8"
 pytest-cov = "*"
 pytest-dotenv = "*"
 Sphinx = "^9"
-sphinx-book-theme = "*"
+sphinx-book-theme = "^1.1"
 sphinx-click = "*"
 pydata-sphinx-theme = "*"
 
