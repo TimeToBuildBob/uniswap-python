@@ -31,6 +31,7 @@ multidict = ">=6.0.5"
 yarl = ">=1.10.0"
 click = "^8"
 python-dotenv = "*"
+aiohttp = ">=3.9.0"
 
 [tool.poetry.dev-dependencies]
 mypy = "*"
