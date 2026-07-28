@@ -374,12 +374,12 @@ Collecting fees and removing liquidity
     # Collect all accumulated fees
     uni.collect_fees(pool_key=pool_key, token_id=token_id)
 
-    # Remove half the liquidity
+    # Remove all liquidity (burn requires the position to be fully empty)
     liquidity = uni.position_manager_get_position_liquidity(token_id)
     uni.decrease_liquidity(
         pool_key=pool_key,
         token_id=token_id,
-        liquidity=liquidity // 2,
+        liquidity=liquidity,
         amount0_min=0,
         amount1_min=0,
     )
