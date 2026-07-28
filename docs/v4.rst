@@ -207,8 +207,8 @@ Making a swap
     Low-liquidity pools can cause large, unexpected losses.
 
 :func:`~uniswap.Uniswap4.make_swap_input` executes a swap for a fixed input
-amount. The ``qtycap`` parameter sets the **minimum** acceptable output; the
-transaction reverts if slippage exceeds this threshold.
+amount. Pass the quoted output as ``qtycap``; the client applies its configured
+``max_slippage`` tolerance when it builds the transaction.
 
 .. code:: python
 
@@ -227,34 +227,33 @@ transaction reverts if slippage exceeds this threshold.
         hooks=ZERO_HOOK,
     )
 
-    # Get a quote to set the minimum output (1% slippage tolerance)
+    # Uniswap4 applies its configured max_slippage (1% by default) to this quote
     expected_usdc = uni.get_price_input(ETH_ADDRESS, USDC, SELL_AMOUNT, fee=500, tick_spacing=10)
-    min_usdc = int(expected_usdc * 0.99)
 
     tx_hash = uni.make_swap_input(
         input_token=ETH_ADDRESS,
         output_token=USDC,
         qty=SELL_AMOUNT,
-        qtycap=min_usdc,       # minimum USDC to accept
+        qtycap=expected_usdc,
         swap_pool_key=pool_key,
     )
     receipt = uni.w3.eth.wait_for_transaction_receipt(tx_hash)
     print(f"Swap mined in block {receipt['blockNumber']}")
 
-:func:`~uniswap.Uniswap4.make_swap_output` buys an exact output amount. Here
-``qtycap`` is the **maximum** input you are willing to spend:
+:func:`~uniswap.Uniswap4.make_swap_output` buys an exact output amount. Pass the
+quoted input as ``qtycap``; the client applies ``max_slippage`` to derive the
+maximum input:
 
 .. code:: python
 
-    # Buy exactly 100 USDC; pay at most 0.05 ETH
+    # Buy exactly 100 USDC; max_slippage is applied to this quoted ETH input
     expected_eth = uni.get_price_output(ETH_ADDRESS, USDC, 100 * 10**6, fee=500, tick_spacing=10)
-    max_eth = int(expected_eth * 1.01)  # 1% slippage tolerance
 
     tx_hash = uni.make_swap_output(
         input_token=ETH_ADDRESS,
         output_token=USDC,
         qty=100 * 10**6,
-        qtycap=max_eth,
+        qtycap=expected_eth,
         swap_pool_key=pool_key,
     )
 

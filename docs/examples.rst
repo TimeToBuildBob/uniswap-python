@@ -143,17 +143,21 @@ Multi-hop swaps
 ```````````````
 
 The v3 client does not expose a multi-hop path parameter in ``make_trade``.
-For pairs without a direct pool, execute two single-hop trades in sequence:
+For pairs without a direct pool, execute two single-hop trades in sequence.
+Wait for the first transaction and use the wallet's confirmed balance increase,
+not its quote, as the second hop's input:
 
 .. code:: python
 
     DAI = "0x6B175474E89094C44Da98b954EedeAC495271d0F"
 
     # ETH → USDC (first hop, 0.05% pool)
+    usdc_before = uni.get_token_balance(USDC)
     tx1 = uni.make_trade(ETH, USDC, ONE_ETH // 10, fee=500)
+    uni.w3.eth.wait_for_transaction_receipt(tx1)
+    usdc_received = uni.get_token_balance(USDC) - usdc_before
 
     # USDC → DAI (second hop, 0.01% stable pool)
-    usdc_received = uni.get_price_input(ETH, USDC, ONE_ETH // 10, fee=500)
     tx2 = uni.make_trade(USDC, DAI, usdc_received, fee=100)
 
 Liquidity management (v3)
