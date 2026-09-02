@@ -14,7 +14,10 @@ Modes:
     - Recent release versions and dates
 
   Report (--report BASELINE.json): reads current metrics + a saved baseline
-    and prints a deltas table for UF grant D4 final adoption report.
+    and prints a D4 table. Stars/forks/watchers are true cumulative counters
+    (delta is current − baseline). GitHub traffic is a rolling 14-day window —
+    those totals are NEVER subtracted. Period clone/view counts are
+    reconstructed by unioning the daily series stored in each snapshot.
 
 GitHub Traffic cannot be read with GitHub Actions' default GITHUB_TOKEN
 (it 403s even with contents: write). Use a PAT:
@@ -40,7 +43,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 REPO = "uniswap-python/uniswap-python"
@@ -111,6 +114,27 @@ def _is_actions_token(token: str) -> bool:
     return token.startswith(_ACTIONS_TOKEN_PREFIXES)
 
 
+def _traffic_daily_series(payload: dict | None, series_key: str) -> list[dict]:
+    """Normalize GitHub Traffic ``clones``/``views`` arrays to ``[{date, count, uniques}]``."""
+    if not isinstance(payload, dict):
+        return []
+    rows: list[dict] = []
+    for item in payload.get(series_key) or []:
+        if not isinstance(item, dict):
+            continue
+        day = str(item.get("timestamp") or "")[:10]
+        if len(day) != 10:
+            continue
+        rows.append(
+            {
+                "date": day,
+                "count": item.get("count"),
+                "uniques": item.get("uniques"),
+            }
+        )
+    return rows
+
+
 # ---------------------------------------------------------------------------
 # Collectors
 # ---------------------------------------------------------------------------
@@ -147,13 +171,19 @@ def _collect_traffic(token: str | None) -> dict:
             )
         }
 
-    clones, c_err = _gh("traffic/clones?per=week", token)
-    views, v_err = _gh("traffic/views?per=week", token)
+    # per=day keeps a reconstructable series. per=week would drop daily
+    # resolution and make period totals over >14 days impossible.
+    clones, c_err = _gh("traffic/clones?per=day", token)
+    views, v_err = _gh("traffic/views?per=day", token)
+    clones_d = clones if isinstance(clones, dict) else None
+    views_d = views if isinstance(views, dict) else None
     result: dict = {
-        "clones_14d": clones.get("count") if clones else None,
-        "unique_cloners_14d": clones.get("uniques") if clones else None,
-        "views_14d": views.get("count") if views else None,
-        "unique_visitors_14d": views.get("uniques") if views else None,
+        "clones_14d": clones_d.get("count") if clones_d else None,
+        "unique_cloners_14d": clones_d.get("uniques") if clones_d else None,
+        "views_14d": views_d.get("count") if views_d else None,
+        "unique_visitors_14d": views_d.get("uniques") if views_d else None,
+        "clones_daily": _traffic_daily_series(clones_d, "clones"),
+        "views_daily": _traffic_daily_series(views_d, "views"),
     }
     if c_err:
         result["clones_error"] = c_err
@@ -238,6 +268,11 @@ def collection_errors(metrics: dict, *, require_traffic: bool = False) -> list[s
             errors.append(f"github_traffic: {traffic['note']}")
         elif traffic.get("clones_14d") is None or traffic.get("views_14d") is None:
             errors.append("github_traffic: clones/views missing from snapshot")
+        elif not traffic.get("clones_daily") or not traffic.get("views_daily"):
+            errors.append(
+                "github_traffic: daily series missing "
+                "(need per=day clones/views to reconstruct period totals)"
+            )
     pypi = metrics.get("pypi") or {}
     if pypi.get("error"):
         errors.append(f"pypi: {pypi['error']}")
@@ -245,6 +280,83 @@ def collection_errors(metrics: dict, *, require_traffic: bool = False) -> list[s
     if versions and isinstance(versions[0], dict) and versions[0].get("error"):
         errors.append(f"pypi_versions: {versions[0]['error']}")
     return errors
+
+
+# ---------------------------------------------------------------------------
+# Period reconstruction (GitHub traffic is a rolling 14-day window)
+# ---------------------------------------------------------------------------
+
+
+def _snapshot_day(snapshot: dict) -> str:
+    return str(snapshot.get("snapshot_at") or "")[:10]
+
+
+def _days_in_range(start: str, end: str) -> list[str]:
+    try:
+        s = date.fromisoformat(start)
+        e = date.fromisoformat(end)
+    except ValueError:
+        return []
+    if e < s:
+        return []
+    days: list[str] = []
+    d = s
+    while d <= e:
+        days.append(d.isoformat())
+        d += timedelta(days=1)
+    return days
+
+
+def load_snapshots(metrics_dir: Path) -> list[dict]:
+    """Load ``adoption-YYYY-MM-DD.json`` files; skip unreadable ones."""
+    snapshots: list[dict] = []
+    if not metrics_dir.is_dir():
+        return snapshots
+    for path in sorted(metrics_dir.glob("adoption-*.json")):
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(data, dict):
+            snapshots.append(data)
+    return snapshots
+
+
+def reconstruct_period_counts(
+    snapshots: list[dict],
+    start_date: str,
+    end_date: str,
+    series_field: str,
+) -> dict:
+    """Union daily clone/view *counts* across snapshots for ``[start, end]``.
+
+    Same-day rows take the max count (later snapshots complete "today").
+    Unique counts are not reconstructed — they are not additive across days.
+    """
+    by_day: dict[str, int] = {}
+    for snap in snapshots:
+        traffic = snap.get("github_traffic") or {}
+        for row in traffic.get(series_field) or []:
+            if not isinstance(row, dict):
+                continue
+            day = str(row.get("date") or "")[:10]
+            if len(day) != 10 or not (start_date <= day <= end_date):
+                continue
+            try:
+                n = int(row["count"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            prev = by_day.get(day)
+            by_day[day] = n if prev is None else max(prev, n)
+
+    span_days = _days_in_range(start_date, end_date)
+    missing = [d for d in span_days if d not in by_day]
+    return {
+        "total": sum(by_day.values()) if by_day else None,
+        "days_covered": len(by_day),
+        "days_span": len(span_days),
+        "missing_days": missing,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -303,6 +415,11 @@ def format_markdown(m: dict) -> str:
                     ["Unique Cloners (14d)", traffic.get("unique_cloners_14d", "N/A")],
                     ["Views (14d)", traffic.get("views_14d", "N/A")],
                     ["Unique Visitors (14d)", traffic.get("unique_visitors_14d", "N/A")],
+                    [
+                        "Daily series stored",
+                        f"{len(traffic.get('clones_daily') or [])} clone-days / "
+                        f"{len(traffic.get('views_daily') or [])} view-days",
+                    ],
                 ],
             ),
             "",
@@ -344,11 +461,104 @@ def _delta(old, new) -> str:
         return "N/A"
 
 
-def format_report(baseline: dict, current: dict) -> str:
+def _format_traffic_report(
+    baseline: dict,
+    current: dict,
+    snapshots: list[dict] | None,
+) -> list[str]:
+    """Traffic section: reconstruct period counts; never subtract 14d windows."""
+    start = _snapshot_day(baseline)
+    end = _snapshot_day(current)
+    all_snaps = list(snapshots or [])
+    all_snaps.extend([baseline, current])
+
+    clones = reconstruct_period_counts(all_snaps, start, end, "clones_daily")
+    views = reconstruct_period_counts(all_snaps, start, end, "views_daily")
+    bt = baseline.get("github_traffic") or {}
+    ct = current.get("github_traffic") or {}
+
+    lines = [
+        "## GitHub Traffic",
+        "",
+        "GitHub's Traffic API retains **14 days**. The `*_14d` fields are rolling",
+        "windows, not cumulative counters — they are **not subtracted** (a later",
+        "window minus an earlier one is not period traffic).",
+        "Period clone/view totals are reconstructed by unioning the daily series",
+        "stored in each snapshot.",
+        "",
+    ]
+
+    if clones["days_covered"] == 0 and views["days_covered"] == 0:
+        lines += [
+            "_Period totals unavailable — snapshots do not yet contain a daily "
+            "traffic series. After the PAT secret is set, each daily run stores "
+            "the 14-day breakdown so D4 can reconstruct the grant window._",
+            "",
+        ]
+    else:
+        lines += [
+            f"### Period totals ({start} → {end})",
+            "",
+            _md_table(
+                ["Metric", "Total", "Coverage"],
+                [
+                    [
+                        "Clones",
+                        clones["total"],
+                        f"{clones['days_covered']}/{clones['days_span']} days",
+                    ],
+                    [
+                        "Views",
+                        views["total"],
+                        f"{views['days_covered']}/{views['days_span']} days",
+                    ],
+                ],
+            ),
+            "",
+        ]
+        missing = sorted(set(clones["missing_days"] + views["missing_days"]))
+        if missing:
+            shown = missing[:12]
+            extra = f" (+{len(missing) - 12} more)" if len(missing) > 12 else ""
+            lines += [f"_Gaps: {', '.join(shown)}{extra}_", ""]
+        lines += [
+            "Unique cloners/visitors are **not additive** across days and cannot "
+            "be reconstructed as a period total.",
+            "",
+        ]
+
+    lines += [
+        "### Rolling 14-day windows (point-in-time, not a period delta)",
+        "",
+        _md_table(
+            ["Metric", "Baseline (14d)", "Current (14d)"],
+            [
+                ["Clones", bt.get("clones_14d", "N/A"), ct.get("clones_14d", "N/A")],
+                [
+                    "Unique cloners",
+                    bt.get("unique_cloners_14d", "N/A"),
+                    ct.get("unique_cloners_14d", "N/A"),
+                ],
+                ["Views", bt.get("views_14d", "N/A"), ct.get("views_14d", "N/A")],
+                [
+                    "Unique visitors",
+                    bt.get("unique_visitors_14d", "N/A"),
+                    ct.get("unique_visitors_14d", "N/A"),
+                ],
+            ],
+        ),
+        "",
+    ]
+    return lines
+
+
+def format_report(
+    baseline: dict,
+    current: dict,
+    snapshots: list[dict] | None = None,
+) -> str:
     bg = baseline.get("github", {})
     cg = current.get("github", {})
-    bt = baseline.get("github_traffic", {})
-    ct = current.get("github_traffic", {})
     bp = baseline.get("pypi", {})
     cp = current.get("pypi", {})
 
@@ -369,42 +579,14 @@ def format_report(baseline: dict, current: dict) -> str:
             ],
         ),
         "",
-        "## GitHub Traffic (14-day window)",
-        "",
-        _md_table(
-            ["Metric", "Baseline", "Current", "Delta"],
-            [
-                [
-                    "Clones (14d)",
-                    bt.get("clones_14d", "N/A"),
-                    ct.get("clones_14d", "N/A"),
-                    _delta(bt.get("clones_14d"), ct.get("clones_14d")),
-                ],
-                [
-                    "Unique Cloners (14d)",
-                    bt.get("unique_cloners_14d", "N/A"),
-                    ct.get("unique_cloners_14d", "N/A"),
-                    _delta(bt.get("unique_cloners_14d"), ct.get("unique_cloners_14d")),
-                ],
-                [
-                    "Views (14d)",
-                    bt.get("views_14d", "N/A"),
-                    ct.get("views_14d", "N/A"),
-                    _delta(bt.get("views_14d"), ct.get("views_14d")),
-                ],
-                [
-                    "Unique Visitors (14d)",
-                    bt.get("unique_visitors_14d", "N/A"),
-                    ct.get("unique_visitors_14d", "N/A"),
-                    _delta(bt.get("unique_visitors_14d"), ct.get("unique_visitors_14d")),
-                ],
-            ],
-        ),
-        "",
+        *_format_traffic_report(baseline, current, snapshots),
         "## PyPI Downloads",
         "",
+        "_PyPI day/week/month figures are also rolling windows; deltas below "
+        "compare two windows, not downloads accumulated over the grant period._",
+        "",
         _md_table(
-            ["Period", "Baseline", "Current", "Delta"],
+            ["Period", "Baseline", "Current", "Window delta"],
             [
                 ["Last day", bp.get("downloads_last_day", "N/A"), cp.get("downloads_last_day", "N/A"),
                  _delta(bp.get("downloads_last_day"), cp.get("downloads_last_day"))],
@@ -441,6 +623,12 @@ def main() -> None:
         help="Report mode: compute deltas vs baseline snapshot",
     )
     parser.add_argument(
+        "--metrics-dir",
+        default=None,
+        help="Directory of adoption-*.json snapshots used to reconstruct "
+        "period traffic (default: directory of --report)",
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="Exit 1 if any collector failed (default in GitHub Actions)",
@@ -463,7 +651,9 @@ def main() -> None:
             sys.exit(1)
         baseline = json.loads(baseline_path.read_text())
         current = collect_metrics(token)
-        print(format_report(baseline, current))
+        metrics_dir = Path(args.metrics_dir) if args.metrics_dir else baseline_path.parent
+        snapshots = load_snapshots(metrics_dir)
+        print(format_report(baseline, current, snapshots))
         errors = collection_errors(current, require_traffic=strict)
         if errors:
             print("Collector errors:", file=sys.stderr)
