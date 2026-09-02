@@ -238,9 +238,10 @@ def _collect_pypi_versions() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def collect_metrics(token: str | None = None) -> dict:
+def collect_metrics(token: str | None = None, *, now: datetime | None = None) -> dict:
+    collected_at = now or datetime.now(timezone.utc)
     return {
-        "snapshot_at": datetime.now(timezone.utc).isoformat(),
+        "snapshot_at": collected_at.isoformat(),
         "repo": REPO,
         "package": PACKAGE,
         "github": _collect_github(token),
@@ -325,18 +326,28 @@ def load_snapshots(metrics_dir: Path) -> list[dict]:
 
 
 def complete_period_end(end: str, *, now: date | None = None) -> tuple[str, str | None]:
-    """Inclusive period end with the current UTC day dropped if still open.
+    """Inclusive period end with the collection-day dropped if still open.
 
-    GitHub Traffic rows for *today* are still accumulating. A 06:00 UTC
-    scheduled report that includes today understates the period. Historical
-    ends (``end < today``) are unchanged.
+    GitHub Traffic rows for the snapshot's UTC day are still accumulating
+    at collection time. Default ``today`` to that snapshot day — do **not**
+    re-read the clock. Collection that starts before UTC midnight and
+    finishes after would otherwise see ``end != datetime.now().date()`` and
+    publish the still-partial collection-day row as a complete-period total.
+
+    Pass ``now`` to treat a historical snapshot as complete (``end < now``).
+    Historical ends are unchanged.
 
     Returns ``(closed_end, excluded_day_or_None)``.
     """
-    today = (now or datetime.now(timezone.utc).date()).isoformat()
-    if end == today:
-        closed = (date.fromisoformat(today) - timedelta(days=1)).isoformat()
-        return closed, today
+    try:
+        end_day = date.fromisoformat(end)
+    except ValueError:
+        return end, None
+    today = now if now is not None else end_day
+    today_s = today.isoformat()
+    if end == today_s:
+        closed = (today - timedelta(days=1)).isoformat()
+        return closed, today_s
     return end, None
 
 
@@ -684,6 +695,9 @@ def main() -> None:
     token = _token_from_env()
     in_actions = os.environ.get("GITHUB_ACTIONS") == "true"
     strict = (args.strict or in_actions) and not args.allow_partial
+    # One clock for snapshot_at, filename, and period-end exclusion so a
+    # midnight boundary during network I/O cannot desynchronize them.
+    collected_at = datetime.now(timezone.utc)
 
     if args.report:
         baseline_path = Path(args.report)
@@ -691,10 +705,10 @@ def main() -> None:
             print(f"ERROR: Baseline file not found: {baseline_path}", file=sys.stderr)
             sys.exit(1)
         baseline = json.loads(baseline_path.read_text())
-        current = collect_metrics(token)
+        current = collect_metrics(token, now=collected_at)
         metrics_dir = Path(args.metrics_dir) if args.metrics_dir else baseline_path.parent
         snapshots = load_snapshots(metrics_dir)
-        print(format_report(baseline, current, snapshots))
+        print(format_report(baseline, current, snapshots, now=collected_at.date()))
         errors = collection_errors(current, require_traffic=strict)
         if errors:
             print("Collector errors:", file=sys.stderr)
@@ -704,13 +718,13 @@ def main() -> None:
                 sys.exit(1)
         return
 
-    metrics = collect_metrics(token)
+    metrics = collect_metrics(token, now=collected_at)
     errors = collection_errors(metrics, require_traffic=strict)
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date_str = collected_at.strftime("%Y-%m-%d")
     json_path = out_dir / f"adoption-{date_str}.json"
     md_path = out_dir / f"adoption-{date_str}.md"
 

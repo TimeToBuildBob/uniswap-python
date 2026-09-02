@@ -132,6 +132,21 @@ def test_complete_period_end_drops_today() -> None:
     assert excluded is None
 
 
+def test_complete_period_end_without_now_uses_snapshot_day() -> None:
+    """Production default must not re-read datetime.now().
+
+    If collection starts on 09-16 and midnight passes during network I/O,
+    a fresh clock would skip exclusion and publish 09-16's partial row.
+    """
+    snap = _mod()
+    closed, excluded = snap.complete_period_end("2026-09-16")
+    assert closed == "2026-09-15"
+    assert excluded == "2026-09-16"
+    closed, excluded = snap.complete_period_end("not-a-date")
+    assert closed == "not-a-date"
+    assert excluded is None
+
+
 def test_format_report_excludes_partial_current_utc_day() -> None:
     snap = _mod()
     baseline = _snap("2026-09-02", _daily("2026-08-20", [10] * 14), clones_14d=140)
@@ -140,6 +155,23 @@ def test_format_report_excludes_partial_current_utc_day() -> None:
         baseline, current, snapshots=[baseline, current], now=date(2026, 9, 16)
     )
     # 09-02 (10) + 09-03..09-15 (13*5) = 75; 09-16's partial 5 is dropped.
+    assert "| Clones | 75 |" in report
+    assert "Period totals (2026-09-02 → 2026-09-15)" in report
+    assert "2026-09-16 excluded" in report
+    assert "| Clones | 80 |" not in report
+
+
+def test_format_report_midnight_crossing_excludes_collection_day() -> None:
+    """Wall clock after midnight must not resurrect the partial collection day.
+
+    collect_metrics stamps snapshot_at first, then does network I/O.
+    format_report() with now=None (the production default) must key off
+    snapshot_at, not datetime.now().
+    """
+    snap = _mod()
+    baseline = _snap("2026-09-02", _daily("2026-08-20", [10] * 14), clones_14d=140)
+    current = _snap("2026-09-16", _daily("2026-09-03", [5] * 14), clones_14d=70)
+    report = snap.format_report(baseline, current, snapshots=[baseline, current])
     assert "| Clones | 75 |" in report
     assert "Period totals (2026-09-02 → 2026-09-15)" in report
     assert "2026-09-16 excluded" in report
