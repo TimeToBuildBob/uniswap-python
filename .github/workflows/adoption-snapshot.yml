@@ -1,0 +1,33 @@
+name: Adoption Snapshot
+
+on:
+  schedule:
+    # Daily at 06:00 UTC — captures GitHub traffic before the 14-day window rolls off
+    - cron: "0 6 * * *"
+  workflow_dispatch:  # allow manual runs
+
+permissions:
+  contents: write  # needed to commit snapshot files
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run adoption snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/adoption_snapshot.py --out metrics/
+
+      - name: Commit snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add metrics/
+          if git diff --staged --quiet; then
+            echo "No changes to commit (snapshot already up to date)"
+          else
+            git commit -m "chore(metrics): daily adoption snapshot $(date -u +%Y-%m-%d)"
+            git push
+          fi
