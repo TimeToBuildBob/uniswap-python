@@ -104,19 +104,60 @@ def test_format_report_does_not_subtract_rolling_windows() -> None:
     snap = _mod()
     baseline = _snap("2026-09-02", _daily("2026-08-20", [10] * 14), clones_14d=140)
     current = _snap("2026-09-16", _daily("2026-09-03", [5] * 14), clones_14d=70)
-    report = snap.format_report(baseline, current, snapshots=[baseline, current])
+    # Freeze now to the day *after* current so 2026-09-16 is a complete day.
+    report = snap.format_report(
+        baseline, current, snapshots=[baseline, current], now=date(2026, 9, 17)
+    )
     assert "-20" not in report
     assert "-70" not in report
     # Naive 14d delta would be 70-140. Reconstructed period clones = 80.
     assert "| Clones | 80 |" in report
     assert "not subtracted" in report
-    assert "Period totals" in report
+    assert "Period totals (2026-09-02 → 2026-09-16)" in report
     # 14d table has no Delta column
     assert "Rolling 14-day windows (point-in-time, not a period delta)" in report
     traffic_header = "### Rolling 14-day windows"
     idx = report.index(traffic_header)
     rolling = report[idx : idx + 600]
     assert "Delta" not in rolling
+
+
+def test_complete_period_end_drops_today() -> None:
+    snap = _mod()
+    closed, excluded = snap.complete_period_end("2026-09-16", now=date(2026, 9, 16))
+    assert closed == "2026-09-15"
+    assert excluded == "2026-09-16"
+    closed, excluded = snap.complete_period_end("2026-09-16", now=date(2026, 9, 17))
+    assert closed == "2026-09-16"
+    assert excluded is None
+
+
+def test_format_report_excludes_partial_current_utc_day() -> None:
+    snap = _mod()
+    baseline = _snap("2026-09-02", _daily("2026-08-20", [10] * 14), clones_14d=140)
+    current = _snap("2026-09-16", _daily("2026-09-03", [5] * 14), clones_14d=70)
+    report = snap.format_report(
+        baseline, current, snapshots=[baseline, current], now=date(2026, 9, 16)
+    )
+    # 09-02 (10) + 09-03..09-15 (13*5) = 75; 09-16's partial 5 is dropped.
+    assert "| Clones | 75 |" in report
+    assert "Period totals (2026-09-02 → 2026-09-15)" in report
+    assert "2026-09-16 excluded" in report
+    assert "| Clones | 80 |" not in report
+
+
+def test_format_report_baseline_today_has_no_complete_days() -> None:
+    snap = _mod()
+    baseline = _snap(
+        "2026-09-02",
+        [{"date": "2026-09-02", "count": 3, "uniques": 1}],
+        clones_14d=3,
+    )
+    report = snap.format_report(
+        baseline, baseline, snapshots=[baseline], now=date(2026, 9, 2)
+    )
+    assert "No complete UTC days" in report
+    assert "Period totals (" not in report
 
 
 def test_format_report_without_daily_series_does_not_invent_delta() -> None:
@@ -133,7 +174,7 @@ def test_format_report_without_daily_series_does_not_invent_delta() -> None:
         "github_traffic": {"clones_14d": 40, "views_14d": 50},
         "pypi": {},
     }
-    report = snap.format_report(baseline, current)
+    report = snap.format_report(baseline, current, now=date(2026, 11, 2))
     assert "Period totals unavailable" in report
     assert "-60" not in report  # 40-100
     assert "-150" not in report  # 50-200

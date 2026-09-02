@@ -18,6 +18,8 @@ Modes:
     (delta is current − baseline). GitHub traffic is a rolling 14-day window —
     those totals are NEVER subtracted. Period clone/view counts are
     reconstructed by unioning the daily series stored in each snapshot.
+    The current UTC day is excluded from period totals — its Traffic row is
+    still accumulating (the 06:00 UTC scheduled run would otherwise undercount).
 
 GitHub Traffic cannot be read with GitHub Actions' default GITHUB_TOKEN
 (it 403s even with contents: write). Use a PAT:
@@ -322,6 +324,22 @@ def load_snapshots(metrics_dir: Path) -> list[dict]:
     return snapshots
 
 
+def complete_period_end(end: str, *, now: date | None = None) -> tuple[str, str | None]:
+    """Inclusive period end with the current UTC day dropped if still open.
+
+    GitHub Traffic rows for *today* are still accumulating. A 06:00 UTC
+    scheduled report that includes today understates the period. Historical
+    ends (``end < today``) are unchanged.
+
+    Returns ``(closed_end, excluded_day_or_None)``.
+    """
+    today = (now or datetime.now(timezone.utc).date()).isoformat()
+    if end == today:
+        closed = (date.fromisoformat(today) - timedelta(days=1)).isoformat()
+        return closed, today
+    return end, None
+
+
 def reconstruct_period_counts(
     snapshots: list[dict],
     start_date: str,
@@ -332,6 +350,7 @@ def reconstruct_period_counts(
 
     Same-day rows take the max count (later snapshots complete "today").
     Unique counts are not reconstructed — they are not additive across days.
+    Callers that want a closed period should pass ``complete_period_end()``.
     """
     by_day: dict[str, int] = {}
     for snap in snapshots:
@@ -465,10 +484,13 @@ def _format_traffic_report(
     baseline: dict,
     current: dict,
     snapshots: list[dict] | None,
+    *,
+    now: date | None = None,
 ) -> list[str]:
     """Traffic section: reconstruct period counts; never subtract 14d windows."""
     start = _snapshot_day(baseline)
-    end = _snapshot_day(current)
+    raw_end = _snapshot_day(current)
+    end, partial_day = complete_period_end(raw_end, now=now)
     all_snaps = list(snapshots or [])
     all_snaps.extend([baseline, current])
 
@@ -484,11 +506,22 @@ def _format_traffic_report(
         "windows, not cumulative counters — they are **not subtracted** (a later",
         "window minus an earlier one is not period traffic).",
         "Period clone/view totals are reconstructed by unioning the daily series",
-        "stored in each snapshot.",
+        "stored in each snapshot. The current UTC day is excluded — its row is",
+        "still accumulating.",
         "",
     ]
 
-    if clones["days_covered"] == 0 and views["days_covered"] == 0:
+    empty_complete_window = bool(partial_day) and end < start
+    no_series = clones["days_covered"] == 0 and views["days_covered"] == 0
+
+    if empty_complete_window:
+        lines += [
+            f"_No complete UTC days in {start} → {raw_end} yet. "
+            f"{partial_day} is still accumulating and is excluded from "
+            f"period totals._",
+            "",
+        ]
+    elif no_series:
         lines += [
             "_Period totals unavailable — snapshots do not yet contain a daily "
             "traffic series. After the PAT secret is set, each daily run stores "
@@ -516,6 +549,12 @@ def _format_traffic_report(
             ),
             "",
         ]
+        if partial_day:
+            lines += [
+                f"_{partial_day} excluded — GitHub Traffic for the current "
+                f"UTC day is still accumulating._",
+                "",
+            ]
         missing = sorted(set(clones["missing_days"] + views["missing_days"]))
         if missing:
             shown = missing[:12]
@@ -556,6 +595,8 @@ def format_report(
     baseline: dict,
     current: dict,
     snapshots: list[dict] | None = None,
+    *,
+    now: date | None = None,
 ) -> str:
     bg = baseline.get("github", {})
     cg = current.get("github", {})
@@ -579,7 +620,7 @@ def format_report(
             ],
         ),
         "",
-        *_format_traffic_report(baseline, current, snapshots),
+        *_format_traffic_report(baseline, current, snapshots, now=now),
         "## PyPI Downloads",
         "",
         "_PyPI day/week/month figures are also rolling windows; deltas below "
