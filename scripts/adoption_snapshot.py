@@ -16,10 +16,19 @@ Modes:
   Report (--report BASELINE.json): reads current metrics + a saved baseline
     and prints a deltas table for UF grant D4 final adoption report.
 
-GitHub Traffic requires a token with push access to the repo:
-  GITHUB_TOKEN=ghp_... python3 scripts/adoption_snapshot.py
+GitHub Traffic cannot be read with GitHub Actions' default GITHUB_TOKEN
+(it 403s even with contents: write). Use a PAT:
 
-Without GITHUB_TOKEN, traffic metrics are omitted (other metrics still work).
+  Fine-grained: Repository permissions → Administration: Read, Contents: Read
+  Classic: public_repo (or repo)
+
+  ADOPTION_GITHUB_TOKEN=github_pat_... python3 scripts/adoption_snapshot.py
+  # GITHUB_TOKEN is also accepted for local/manual runs
+
+Without a PAT, traffic metrics are omitted (other metrics still work).
+The daily workflow reads repo secret ADOPTION_GITHUB_TOKEN and runs --strict
+so a failed collector does not get committed as a successful snapshot.
+
 Version-split download counts require BigQuery — not yet wired; see TODO below.
 """
 from __future__ import annotations
@@ -28,6 +37,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -35,6 +45,10 @@ from pathlib import Path
 
 REPO = "uniswap-python/uniswap-python"
 PACKAGE = "uniswap-python"
+USER_AGENT = f"{PACKAGE}-adoption-tracker/1.0; +https://github.com/{REPO}"
+
+# Actions GITHUB_TOKEN always 403s on /traffic/* — needs a PAT instead.
+_ACTIONS_TOKEN_PREFIXES = ("ghs_",)
 
 
 # ---------------------------------------------------------------------------
@@ -42,32 +56,59 @@ PACKAGE = "uniswap-python"
 # ---------------------------------------------------------------------------
 
 
+def _request_json(
+    url: str,
+    headers: dict | None = None,
+    retries: int = 5,
+) -> tuple[dict | list | None, str | None]:
+    req_headers = {"User-Agent": USER_AGENT}
+    if headers:
+        req_headers.update(headers)
+    last_err: str | None = None
+    for attempt in range(retries):
+        req = urllib.request.Request(url, headers=req_headers)
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return json.loads(r.read()), None
+        except urllib.error.HTTPError as e:
+            last_err = f"HTTP {e.code}: {e.reason}"
+            retryable = e.code in (429, 500, 502, 503, 504) and attempt < retries - 1
+            if retryable:
+                retry_after = e.headers.get("Retry-After") if e.headers else None
+                try:
+                    delay = min(int(retry_after), 30) if retry_after else 2 ** (attempt + 1)
+                except (TypeError, ValueError):
+                    delay = 2 ** (attempt + 1)
+                # pypistats.org 429s with no Retry-After; give it a couple of seconds.
+                time.sleep(max(delay, 2))
+                continue
+            return None, last_err
+        except Exception as e:
+            return None, str(e)
+    return None, last_err
+
+
 def _gh(path: str, token: str | None = None) -> tuple[dict | list | None, str | None]:
     base = f"https://api.github.com/repos/{REPO}"
     url = f"{base}/{path}" if path else base
-    req = urllib.request.Request(url)
-    req.add_header("Accept", "application/vnd.github+json")
-    req.add_header("X-GitHub-Api-Version", "2022-11-28")
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
     if token:
-        req.add_header("Authorization", f"Bearer {token}")
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            return json.loads(r.read()), None
-    except urllib.error.HTTPError as e:
-        return None, f"HTTP {e.code}: {e.reason}"
-    except Exception as e:
-        return None, str(e)
+        headers["Authorization"] = f"Bearer {token}"
+    return _request_json(url, headers)
 
 
 def _fetch_json(url: str, headers: dict | None = None) -> tuple[dict | None, str | None]:
-    req = urllib.request.Request(url, headers=headers or {})
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            return json.loads(r.read()), None
-    except urllib.error.HTTPError as e:
-        return None, f"HTTP {e.code}: {e.reason}"
-    except Exception as e:
-        return None, str(e)
+    data, err = _request_json(url, headers)
+    if isinstance(data, list):
+        return None, "expected JSON object, got list"
+    return data, err
+
+
+def _is_actions_token(token: str) -> bool:
+    return token.startswith(_ACTIONS_TOKEN_PREFIXES)
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +130,22 @@ def _collect_github(token: str | None) -> dict:
 
 def _collect_traffic(token: str | None) -> dict:
     if not token:
-        return {"note": "Skipped — set GITHUB_TOKEN with push access to capture traffic (14-day window only)"}
+        return {
+            "note": (
+                "Skipped — set ADOPTION_GITHUB_TOKEN (PAT with Administration:read) "
+                "to capture traffic (14-day window only). The default Actions "
+                "GITHUB_TOKEN cannot read /traffic/*."
+            )
+        }
+    if _is_actions_token(token):
+        return {
+            "error": (
+                "GitHub Actions GITHUB_TOKEN cannot access the Traffic API "
+                "(403 even with contents: write). Set repo secret "
+                "ADOPTION_GITHUB_TOKEN to a PAT with Administration:read "
+                "(fine-grained) or public_repo (classic)."
+            )
+        }
 
     clones, c_err = _gh("traffic/clones?per=week", token)
     views, v_err = _gh("traffic/views?per=week", token)
@@ -110,9 +166,12 @@ def _collect_pypi_recent() -> dict:
     # TODO: version-split downloads require BigQuery or a scraper not yet wired.
     # pypistats.org /recent gives overall day/week/month totals only.
     url = f"https://pypistats.org/api/packages/{PACKAGE}/recent"
-    data, err = _fetch_json(url, {"User-Agent": f"{PACKAGE}-adoption-tracker/1.0; +https://github.com/{REPO}"})
+    data, err = _fetch_json(url)
     if err:
-        return {"error": err, "note": "pypistats.org rate-limited; retry after a few minutes"}
+        result = {"error": err}
+        if "429" in err:
+            result["note"] = "pypistats.org rate-limited; retry after a few minutes"
+        return result
     d = data.get("data", {})
     return {
         "downloads_last_day": d.get("last_day"),
@@ -159,6 +218,35 @@ def collect_metrics(token: str | None = None) -> dict:
     }
 
 
+def collection_errors(metrics: dict, *, require_traffic: bool = False) -> list[str]:
+    """Return human-readable collector failures (empty if the snapshot is complete).
+
+    ``require_traffic=True`` (``--strict`` / GitHub Actions) also treats a
+    skipped or empty traffic section as a failure so the daily workflow cannot
+    commit N/A clones/visitors as a successful snapshot.
+    """
+    errors: list[str] = []
+    gh = metrics.get("github") or {}
+    if gh.get("error"):
+        errors.append(f"github: {gh['error']}")
+    traffic = metrics.get("github_traffic") or {}
+    for key in ("error", "clones_error", "views_error"):
+        if traffic.get(key):
+            errors.append(f"github_traffic.{key}: {traffic[key]}")
+    if require_traffic:
+        if traffic.get("note"):
+            errors.append(f"github_traffic: {traffic['note']}")
+        elif traffic.get("clones_14d") is None or traffic.get("views_14d") is None:
+            errors.append("github_traffic: clones/views missing from snapshot")
+    pypi = metrics.get("pypi") or {}
+    if pypi.get("error"):
+        errors.append(f"pypi: {pypi['error']}")
+    versions = metrics.get("pypi_versions") or []
+    if versions and isinstance(versions[0], dict) and versions[0].get("error"):
+        errors.append(f"pypi_versions: {versions[0]['error']}")
+    return errors
+
+
 # ---------------------------------------------------------------------------
 # Formatters
 # ---------------------------------------------------------------------------
@@ -201,10 +289,11 @@ def format_markdown(m: dict) -> str:
         f"",
     ]
 
-    if "note" in traffic:
+    traffic_err = traffic.get("error") or traffic.get("clones_error") or traffic.get("views_error")
+    if "note" in traffic and not traffic_err:
         sections += [f"_{traffic['note']}_", ""]
-    elif "error" in traffic:
-        sections += [f"_Error: {traffic['error']}_", ""]
+    elif traffic_err:
+        sections += [f"_Error: {traffic_err}_", ""]
     else:
         sections += [
             _md_table(
@@ -258,6 +347,8 @@ def _delta(old, new) -> str:
 def format_report(baseline: dict, current: dict) -> str:
     bg = baseline.get("github", {})
     cg = current.get("github", {})
+    bt = baseline.get("github_traffic", {})
+    ct = current.get("github_traffic", {})
     bp = baseline.get("pypi", {})
     cp = current.get("pypi", {})
 
@@ -275,6 +366,38 @@ def format_report(baseline: dict, current: dict) -> str:
                 ["Stars", bg.get("stars", "N/A"), cg.get("stars", "N/A"), _delta(bg.get("stars"), cg.get("stars"))],
                 ["Forks", bg.get("forks", "N/A"), cg.get("forks", "N/A"), _delta(bg.get("forks"), cg.get("forks"))],
                 ["Watchers", bg.get("watchers", "N/A"), cg.get("watchers", "N/A"), _delta(bg.get("watchers"), cg.get("watchers"))],
+            ],
+        ),
+        "",
+        "## GitHub Traffic (14-day window)",
+        "",
+        _md_table(
+            ["Metric", "Baseline", "Current", "Delta"],
+            [
+                [
+                    "Clones (14d)",
+                    bt.get("clones_14d", "N/A"),
+                    ct.get("clones_14d", "N/A"),
+                    _delta(bt.get("clones_14d"), ct.get("clones_14d")),
+                ],
+                [
+                    "Unique Cloners (14d)",
+                    bt.get("unique_cloners_14d", "N/A"),
+                    ct.get("unique_cloners_14d", "N/A"),
+                    _delta(bt.get("unique_cloners_14d"), ct.get("unique_cloners_14d")),
+                ],
+                [
+                    "Views (14d)",
+                    bt.get("views_14d", "N/A"),
+                    ct.get("views_14d", "N/A"),
+                    _delta(bt.get("views_14d"), ct.get("views_14d")),
+                ],
+                [
+                    "Unique Visitors (14d)",
+                    bt.get("unique_visitors_14d", "N/A"),
+                    ct.get("unique_visitors_14d", "N/A"),
+                    _delta(bt.get("unique_visitors_14d"), ct.get("unique_visitors_14d")),
+                ],
             ],
         ),
         "",
@@ -302,6 +425,10 @@ def format_report(baseline: dict, current: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _token_from_env() -> str | None:
+    return os.environ.get("ADOPTION_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN") or None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -313,9 +440,21 @@ def main() -> None:
         metavar="BASELINE.json",
         help="Report mode: compute deltas vs baseline snapshot",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit 1 if any collector failed (default in GitHub Actions)",
+    )
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Write snapshot and exit 0 even if some collectors failed",
+    )
     args = parser.parse_args()
 
-    token = os.environ.get("GITHUB_TOKEN")
+    token = _token_from_env()
+    in_actions = os.environ.get("GITHUB_ACTIONS") == "true"
+    strict = (args.strict or in_actions) and not args.allow_partial
 
     if args.report:
         baseline_path = Path(args.report)
@@ -325,9 +464,17 @@ def main() -> None:
         baseline = json.loads(baseline_path.read_text())
         current = collect_metrics(token)
         print(format_report(baseline, current))
+        errors = collection_errors(current, require_traffic=strict)
+        if errors:
+            print("Collector errors:", file=sys.stderr)
+            for err in errors:
+                print(f"  - {err}", file=sys.stderr)
+            if strict:
+                sys.exit(1)
         return
 
     metrics = collect_metrics(token)
+    errors = collection_errors(metrics, require_traffic=strict)
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -345,6 +492,13 @@ def main() -> None:
     pypi = metrics.get("pypi", {})
     print(f"Stars: {gh.get('stars', 'N/A')}  Forks: {gh.get('forks', 'N/A')}  "
           f"PyPI/month: {pypi.get('downloads_last_month', 'N/A')}")
+
+    if errors:
+        print("Collector errors:", file=sys.stderr)
+        for err in errors:
+            print(f"  - {err}", file=sys.stderr)
+        if strict:
+            sys.exit(1)
 
 
 if __name__ == "__main__":

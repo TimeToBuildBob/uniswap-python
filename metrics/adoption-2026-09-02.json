@@ -1,24 +1,21 @@
 {
-  "snapshot_at": "2026-09-02T01:18:42.212052+00:00",
+  "snapshot_at": "2026-09-02T01:29:29.972374+00:00",
   "repo": "uniswap-python/uniswap-python",
   "package": "uniswap-python",
   "github": {
     "stars": 1011,
     "forks": 375,
     "watchers": 23,
-    "open_issues": 65
+    "open_issues": 66
   },
   "github_traffic": {
-    "clones_14d": null,
-    "unique_cloners_14d": null,
-    "views_14d": null,
-    "unique_visitors_14d": null,
-    "clones_error": "HTTP 403: Forbidden",
-    "views_error": "HTTP 403: Forbidden"
+    "note": "Skipped \u2014 set ADOPTION_GITHUB_TOKEN (PAT with Administration:read) to capture traffic (14-day window only). The default Actions GITHUB_TOKEN cannot read /traffic/*."
   },
   "pypi": {
-    "error": "HTTP 429: Too Many Requests",
-    "note": "pypistats.org rate-limited; retry after a few minutes"
+    "downloads_last_day": 19,
+    "downloads_last_week": 210,
+    "downloads_last_month": 1044,
+    "version_split_note": "Per-version counts require BigQuery (pypistats.org does not expose them). To check v4 pickup specifically, compare release-date-filtered BigQuery results."
   },
   "pypi_versions": [
     {
