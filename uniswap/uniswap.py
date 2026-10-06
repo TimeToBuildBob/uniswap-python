@@ -740,7 +740,9 @@ class Uniswap:
             else:
                 func = self.router.functions.swapExactTokensForTokens
             weth_address = self.get_weth_address()
-            if is_same_address(input_token, weth_address) or is_same_address(output_token, weth_address):
+            if is_same_address(input_token, weth_address) or is_same_address(
+                output_token, weth_address
+            ):
                 path = [input_token, output_token]
             else:
                 path = [input_token, weth_address, output_token]
@@ -1010,7 +1012,8 @@ class Uniswap:
             weth = self.get_weth_address()
             path = (
                 [input_token, output_token]
-                if is_same_address(input_token, weth) or is_same_address(output_token, weth)
+                if is_same_address(input_token, weth)
+                or is_same_address(output_token, weth)
                 else [input_token, weth, output_token]
             )
             return self._build_and_send_tx(
@@ -1372,8 +1375,8 @@ class Uniswap:
                 # source: https://stackoverflow.com/questions/71814845/how-to-calculate-uniswap-v3-pools-total-value-locked-tvl-on-chain
                 liquidityNet = tickData[1]
                 liquidity_total += liquidityNet
-                sqrtPriceLow = 1.0001 ** (tick // 2)
-                sqrtPriceHigh = 1.0001 ** ((tick + TICK_SPACING) // 2)
+                sqrtPriceLow = 1.0001 ** (tick / 2)
+                sqrtPriceHigh = 1.0001 ** ((tick + TICK_SPACING) / 2)
                 token0_liquidity += self.get_token0_in_pool(
                     liquidity_total, sqrtPrice, sqrtPriceLow, sqrtPriceHigh
                 )
@@ -1879,8 +1882,8 @@ class Uniswap:
                 den0 = self.get_token(token_out).decimals
                 den1 = self.get_token(token_in).decimals
             sqrtPriceX96 = pool_contract.functions.slot0().call()[0]
-            raw_price = (sqrtPriceX96 * sqrtPriceX96 * 10**den1 >> (96 * 2)) / (
-                10**den0
+            raw_price = (sqrtPriceX96 * sqrtPriceX96 * 10**den1) / (
+                (1 << 192) * 10**den0
             )
             if t1.lower() == token_in.lower():
                 raw_price = 1 / raw_price
