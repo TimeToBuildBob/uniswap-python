@@ -93,7 +93,7 @@ def anvil() -> Generator[AnvilInstance, None, None]:
 
     port = 10997  # different from test_uniswap4.py (10998) to allow parallel runs
     p = subprocess.Popen(
-        f"anvil --port {port} --chain-id 1 --fork-url {os.environ['PROVIDER']}",
+        f"anvil --port {port} --chain-id 1 --fork-url {os.environ['PROVIDER']} --timeout 120000 --retries 15",
         shell=True,
     )
     # Anvil test account #2 (1000 ETH pre-funded)
