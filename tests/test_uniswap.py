@@ -122,6 +122,11 @@ def anvil() -> Generator[AnvilInstance, None, None]:
         --chain-id 1
         --fork-url {os.environ["PROVIDER"]}
         --gas-price {defaultGasPrice}
+        --timeout 120000
+        --retries 15
+        --fork-state-by-number
+        --no-fork-node-info
+        --fork-block-number -32
         """.replace("\n", " "),
         shell=True,
     )
