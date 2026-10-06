@@ -44,6 +44,7 @@ pre-commit = "*"
 pytest = "^8"
 pytest-cov = "*"
 pytest-dotenv = "*"
+pytest-rerunfailures = "^16.7"
 ruff = ">=0.9"
 Sphinx = "^9"
 sphinx-book-theme = "^1.1"
@@ -53,6 +54,18 @@ pydata-sphinx-theme = "*"
 [tool.pytest.ini_options]
 log_cli = false  # to print logs during tests, set to true
 #log_level = "NOTSET"
+# Public fork RPCs (ethereum.publicnode.com) reset mid-test while Anvil
+# fetches uncached storage. Retry only that flake class, not assertion failures.
+reruns = 2
+reruns_delay = 2
+only_rerun = [
+    "connection reset",
+    "HTTP request failed",
+    "failed to get storage",
+    "Connection refused",
+    "error sending request",
+    "Max retries exceeded",
+]
 
 [tool.ruff.lint]
 ignore = ["E402", "E501"]

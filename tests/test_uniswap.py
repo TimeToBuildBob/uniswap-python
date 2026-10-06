@@ -2,10 +2,10 @@ import logging
 import os
 import shutil
 import subprocess
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from time import sleep
-from typing import Generator
 
 import pytest
 from web3 import Web3
@@ -122,6 +122,11 @@ def anvil() -> Generator[AnvilInstance, None, None]:
         --chain-id 1
         --fork-url {os.environ["PROVIDER"]}
         --gas-price {defaultGasPrice}
+        --timeout 120000
+        --retries 15
+        --fork-state-by-number
+        --no-fork-node-info
+        --fork-block-number -32
         """.replace("\n", " "),
         shell=True,
     )
@@ -148,7 +153,7 @@ ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 # TODO: Change pytest.param(..., mark=pytest.mark.xfail) to the expectation/raises method
 @pytest.mark.usefixtures("client", "web3")
-class TestUniswap(object):
+class TestUniswap:
     # ------ Exchange ------------------------------------------------------------------
     def test_get_fee_maker(self, client: Uniswap):
         if client.version not in [1, 2]:
@@ -201,6 +206,15 @@ class TestUniswap(object):
         token0, token1 = tokens[token0], tokens[token1]
         if client.version == 1 and ETH_ADDRESS not in [token0, token1]:
             pytest.skip("Not supported in this version of Uniswap")
+        # The UNI v1 exchange output-price functions (getEthToTokenOutputPrice /
+        # getTokenToEthOutputPrice) raise InvalidJump under Anvil's strict revm.
+        # Input-price functions on the same exchange pass; DAI exchange is fine.
+        # Tracked alongside the token-to-ETH xfail in make_trade / make_trade_output.
+        if client.version == 1 and tokens["UNI"] in [token0, token1]:
+            pytest.xfail(
+                "v1 UNI exchange output-price raises EvmError: InvalidJump under "
+                "Anvil revm; tracked for v1 deprecation"
+            )
         r = client.get_price_output(token0, token1, qty, fee=FeeTier.TIER_3000)
         assert r
 

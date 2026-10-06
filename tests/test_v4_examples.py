@@ -14,10 +14,11 @@ See docs/v4.rst for the prose version of these examples.
 
 import os
 import shutil
+import socket
 import subprocess
+import time
+from collections.abc import Generator
 from dataclasses import dataclass
-from time import sleep
-from typing import Generator
 
 import pytest
 from web3 import Web3
@@ -92,13 +93,28 @@ def anvil() -> Generator[AnvilInstance, None, None]:
 
     port = 10997  # different from test_uniswap4.py (10998) to allow parallel runs
     p = subprocess.Popen(
-        f"anvil --port {port} --chain-id 1 --fork-url {os.environ['PROVIDER']}",
+        f"anvil --port {port} --chain-id 1 --fork-url {os.environ['PROVIDER']} --timeout 120000 --retries 15 --fork-state-by-number --no-fork-node-info --fork-block-number -32",
         shell=True,
     )
     # Anvil test account #2 (1000 ETH pre-funded)
     eth_address = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
     eth_privkey = "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
-    sleep(3)
+    # Poll until Anvil accepts connections. Fail immediately if the process
+    # exits (genesis failure), rather than waiting out the deadline.
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        if p.poll() is not None:
+            raise RuntimeError(
+                f"Anvil exited before listen on port {port} (code {p.returncode})"
+            )
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                break
+        except OSError:
+            time.sleep(0.5)
+    else:
+        p.kill()
+        raise RuntimeError(f"Anvil did not start on port {port} within 60s")
     yield AnvilInstance(f"http://127.0.0.1:{port}", eth_address, eth_privkey)
     p.kill()
     p.wait()

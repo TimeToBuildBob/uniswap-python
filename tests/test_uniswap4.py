@@ -1,10 +1,11 @@
 import logging
 import os
 import shutil
+import socket
 import subprocess
+import time
 from contextlib import contextmanager
 from dataclasses import astuple, dataclass
-from time import sleep
 from typing import Generator, List, Optional
 
 import pytest
@@ -106,19 +107,43 @@ def anvil() -> Generator[AnvilInstance, None, None]:
 
     port = 10998
     defaultGasPrice = 100_000_000_000  # 100 gwei
+    # Public RPCs (ethereum.publicnode.com) often cannot serve eth_getBalance
+    # by block hash ("block not found: hash …" → failed to create genesis).
+    # --fork-state-by-number is the documented Anvil workaround; pin a few
+    # blocks behind latest so the chosen block is actually available.
     p = subprocess.Popen(
         f"""anvil
         --port {port}
         --chain-id 1
         --fork-url {os.environ["PROVIDER"]}
         --gas-price {defaultGasPrice}
+        --timeout 120000
+        --retries 15
+        --fork-state-by-number
+        --no-fork-node-info
+        --fork-block-number -32
         """.replace("\n", " "),
         shell=True,
     )
     # Address #1 when anvil is run with `--wallet.seed test`, it starts with 1000 ETH
     eth_address = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
     eth_privkey = "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"
-    sleep(3)
+    # Poll until Anvil accepts connections. Fail immediately if the process
+    # exits (genesis failure), rather than waiting out the deadline.
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        if p.poll() is not None:
+            raise RuntimeError(
+                f"Anvil exited before listen on port {port} (code {p.returncode})"
+            )
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                break
+        except OSError:
+            time.sleep(0.5)
+    else:
+        p.kill()
+        raise RuntimeError(f"Anvil did not start on port {port} within 60s")
     yield AnvilInstance(f"http://127.0.0.1:{port}", eth_address, eth_privkey)
     p.kill()
     p.wait()
